@@ -1,9 +1,3 @@
-/* ---------------------------------------------------------
-   Nokira Internet Speed Test — script.js
-   Cloudflare Ping + Download + Streaming Upload
-   Full Gauge Animation + ISP Detection + Pros/Cons
---------------------------------------------------------- */
-
 /* ELEMENTS */
 const themeSwitch = document.getElementById("themeSwitch");
 const startBtn = document.getElementById("startBtn");
@@ -35,13 +29,13 @@ const emailBtn = document.getElementById("emailBtn");
 
 /* CONSTANTS */
 const GAUGE_MAX_MBPS = 500;
-const GAUGE_LENGTH = 503; // circumference of r=80 circle
+const GAUGE_LENGTH = 503;
 
 /* Cloudflare Endpoints */
-const CLOUDFLARE_PING_URL = "https://speed.cloudflare.com/__down?bytes=1";
-const CLOUDFLARE_DOWNLOAD_URL = "https://speed.cloudflare.com/__down?bytes=20000000";
-const CLOUDFLARE_UPLOAD_URL = "https://speed.cloudflare.com/__up";
-const IP_INFO_URL = "https://ipapi.co/json/"; // no token required
+const CF_PING = "https://speed.cloudflare.com/__down?bytes=1";
+const CF_DOWN = "https://speed.cloudflare.com/__down?bytes=";
+const CF_UP = "https://speed.cloudflare.com/__up";
+const IP_INFO = "https://ipapi.co/json/";
 
 /* STATE */
 let lastSpeedDisplay = 0;
@@ -79,20 +73,18 @@ themeSwitch.addEventListener("change", () => {
 function animateSpeed(target, label) {
     const start = lastSpeedDisplay;
     const end = target;
-    const duration = 600;
+    const duration = 500;
     const startTime = performance.now();
 
     function step(now) {
         const t = Math.min(1, (now - startTime) / duration);
-        const eased = 1 - Math.pow(1 - t, 3);
+        const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
         const value = start + (end - start) * eased;
         speedValueEl.textContent = value.toFixed(2);
-        if (t < 1) {
-            requestAnimationFrame(step);
-        } else {
-            lastSpeedDisplay = end;
-        }
+        if (t < 1) requestAnimationFrame(step);
+        else lastSpeedDisplay = end;
     }
+
     speedLabelEl.textContent = label;
     requestAnimationFrame(step);
 }
@@ -100,53 +92,50 @@ function animateSpeed(target, label) {
 function updateGauge(mbps) {
     const clamped = Math.max(0, Math.min(GAUGE_MAX_MBPS, mbps));
     const ratio = clamped / GAUGE_MAX_MBPS;
-    const offset = GAUGE_LENGTH - GAUGE_LENGTH * ratio;
-    gaugeArc.style.strokeDashoffset = offset.toString();
+    gaugeArc.style.strokeDashoffset = (GAUGE_LENGTH - GAUGE_LENGTH * ratio).toString();
 }
 
 /* ---------------------------------------------------------
-   PING + JITTER (Cloudflare)
+   PING + JITTER
 --------------------------------------------------------- */
-async function measurePingAndJitter(iterations = 8) {
+async function measurePingAndJitter(iter = 10) {
     const times = [];
 
-    for (let i = 0; i < iterations; i++) {
+    for (let i = 0; i < iter; i++) {
         const start = performance.now();
         try {
-            await fetch(CLOUDFLARE_PING_URL, { cache: "no-store" });
-            const end = performance.now();
-            times.push(end - start);
+            await fetch(CF_PING, { cache: "no-store" });
+            times.push(performance.now() - start);
         } catch {
             times.push(200);
         }
     }
 
     const avg = times.reduce((a, b) => a + b, 0) / times.length;
+
     const jitter =
-        times.length > 1
-            ? Math.sqrt(
-                  times
-                      .map((t) => Math.pow(t - avg, 2))
-                      .reduce((a, b) => a + b, 0) /
-                      (times.length - 1)
-              )
-            : 0;
+        Math.sqrt(
+            times
+                .map((t) => Math.pow(t - avg, 2))
+                .reduce((a, b) => a + b, 0) / times.length
+        );
 
     return { ping: avg, jitter };
 }
 
 /* ---------------------------------------------------------
-   DOWNLOAD TEST (Cloudflare)
+   ADAPTIVE DOWNLOAD TEST
 --------------------------------------------------------- */
 async function measureDownload() {
-    const startTime = performance.now();
+    let size = 20_000_000; // 20MB
     let bytes = 0;
+    const start = performance.now();
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20000);
 
     try {
-        const response = await fetch(CLOUDFLARE_DOWNLOAD_URL, {
+        const response = await fetch(CF_DOWN + size, {
             cache: "no-store",
             signal: controller.signal,
         });
@@ -158,11 +147,11 @@ async function measureDownload() {
             if (done) break;
 
             bytes += value.length;
-            const elapsed = (performance.now() - startTime) / 1000;
+            const elapsed = (performance.now() - start) / 1000;
 
-            if (elapsed > 0.5) {
+            if (elapsed > 0.4) {
                 const mbps = (bytes * 8) / elapsed / 1_000_000;
-                animateSpeed(mbps, "Measuring download…");
+                animateSpeed(mbps, "Download…");
                 updateGauge(mbps);
             }
         }
@@ -173,55 +162,50 @@ async function measureDownload() {
 
     clearTimeout(timeout);
 
-    const totalSeconds = (performance.now() - startTime) / 1000;
+    const totalSeconds = (performance.now() - start) / 1000;
     return (bytes * 8) / totalSeconds / 1_000_000;
 }
 
 /* ---------------------------------------------------------
-   UPLOAD TEST (Cloudflare STREAMING upload)
+   STREAMING UPLOAD (Chrome‑safe)
 --------------------------------------------------------- */
 async function measureUpload() {
-    const sizeBytes = 4_000_000;
-    const chunk = new Uint8Array(65536);
+    let totalBytes = 4_000_000;
+    const chunkSize = 64 * 1024;
+    const chunk = new Uint8Array(chunkSize);
     crypto.getRandomValues(chunk);
 
-    const startTime = performance.now();
+    const start = performance.now();
 
     const stream = new ReadableStream({
-        start(controller) {
-            let sent = 0;
-            function push() {
-                if (sent >= sizeBytes) {
-                    controller.close();
-                    return;
-                }
-                controller.enqueue(chunk);
-                sent += chunk.length;
-                push();
+        async pull(controller) {
+            if (totalBytes <= 0) {
+                controller.close();
+                return;
             }
-            push();
+            controller.enqueue(chunk);
+            totalBytes -= chunkSize;
+
+            await new Promise((r) => setTimeout(r, 0));
         },
     });
 
-    try {
-        await fetch(CLOUDFLARE_UPLOAD_URL, {
-            method: "POST",
-            body: stream,
-        });
-    } catch (e) {
-        throw e;
-    }
+    await fetch(CF_UP, {
+        method: "POST",
+        body: stream,
+        duplex: "half",
+    });
 
-    const totalSeconds = (performance.now() - startTime) / 1000;
-    return (sizeBytes * 8) / totalSeconds / 1_000_000;
+    const totalSeconds = (performance.now() - start) / 1000;
+    return (4_000_000 * 8) / totalSeconds / 1_000_000;
 }
 
 /* ---------------------------------------------------------
-   IP + ISP INFO
+   IP + ISP
 --------------------------------------------------------- */
 async function fetchIPInfo() {
     try {
-        const res = await fetch(IP_INFO_URL, { cache: "no-store" });
+        const res = await fetch(IP_INFO, { cache: "no-store" });
         const data = await res.json();
 
         return {
@@ -243,29 +227,28 @@ async function fetchIPInfo() {
 }
 
 /* ---------------------------------------------------------
-   ISP GUESSING ENGINE
+   ISP GUESSING
 --------------------------------------------------------- */
-function guessISP(ipInfo, down, up, ping) {
-    const ispRaw = ipInfo.isp || "Unknown";
-    const ispLower = ispRaw.toLowerCase();
+function guessISP(info, down, up, ping) {
+    const isp = (info.isp || "").toLowerCase();
     const symmetric = Math.abs(down - up) / Math.max(down, 1) < 0.25;
 
-    if (ispLower.includes("google")) return "Likely Google Fiber";
-    if (ispLower.includes("comcast") || ispLower.includes("xfinity")) return "Likely Xfinity";
-    if (ispLower.includes("spectrum") || ispLower.includes("charter")) return "Likely Spectrum";
-    if (ispLower.includes("verizon")) return symmetric ? "Likely Verizon Fios" : "Likely Verizon";
-    if (ispLower.includes("at&t") || ispLower.includes("att")) return symmetric ? "Likely AT&T Fiber" : "Likely AT&T";
-    if (ispLower.includes("cox")) return "Likely Cox";
-    if (ispLower.includes("rogers")) return "Likely Rogers";
-    if (ispLower.includes("bell")) return "Likely Bell";
-    if (ispLower.includes("telus")) return "Likely Telus";
-    if (ispLower.includes("virgin")) return "Likely Virgin Media";
+    if (isp.includes("google")) return "Likely Google Fiber";
+    if (isp.includes("comcast") || isp.includes("xfinity")) return "Likely Xfinity";
+    if (isp.includes("spectrum") || isp.includes("charter")) return "Likely Spectrum";
+    if (isp.includes("verizon")) return symmetric ? "Likely Verizon Fios" : "Likely Verizon";
+    if (isp.includes("at&t") || isp.includes("att")) return symmetric ? "Likely AT&T Fiber" : "Likely AT&T";
+    if (isp.includes("cox")) return "Likely Cox";
+    if (isp.includes("rogers")) return "Likely Rogers";
+    if (isp.includes("bell")) return "Likely Bell";
+    if (isp.includes("telus")) return "Likely Telus";
+    if (isp.includes("virgin")) return "Likely Virgin Media";
 
-    if (symmetric && down > 300) return "Likely fiber provider";
-    if (!symmetric && down > 50 && up < 40) return "Likely cable provider";
+    if (symmetric && down > 300) return "Likely Fiber Provider";
+    if (!symmetric && down > 50 && up < 40) return "Likely Cable Provider";
     if (ping > 60 && down < 50) return "Possibly LTE/5G";
 
-    return ispRaw;
+    return info.isp;
 }
 
 /* ---------------------------------------------------------
@@ -275,16 +258,10 @@ function analyzeNetwork(down, up, ping, jitter) {
     const pros = [];
     const cons = [];
 
-    if (down >= 500) {
-        pros.push("Excellent for 4K streaming, cloud gaming, and heavy downloads.");
-        pros.push("Plenty of headroom for multiple users.");
-    } else if (down >= 200) {
-        pros.push("Great for HD/4K streaming and most tasks.");
-    } else if (down >= 50) {
-        pros.push("Good for HD streaming and browsing.");
-    } else {
-        cons.push("Download speed is low for modern streaming.");
-    }
+    if (down >= 500) pros.push("Excellent for 4K streaming and cloud gaming.");
+    else if (down >= 200) pros.push("Great for HD/4K streaming and multitasking.");
+    else if (down >= 50) pros.push("Good for HD streaming and browsing.");
+    else cons.push("Download speed is low for modern streaming.");
 
     if (up >= 100) pros.push("Fantastic upload for streaming and backups.");
     else if (up >= 20) pros.push("Strong upload for video calls.");
@@ -294,15 +271,11 @@ function analyzeNetwork(down, up, ping, jitter) {
     if (ping <= 20) pros.push("Excellent latency for gaming.");
     else if (ping <= 40) pros.push("Good latency for most apps.");
     else if (ping <= 70) cons.push("Latency may be noticeable in games.");
-    else cons.push("High latency affects real-time apps.");
+    else cons.push("High latency affects real‑time apps.");
 
     if (jitter <= 10) pros.push("Stable connection for calls.");
     else if (jitter <= 25) cons.push("Some jitter may cause glitches.");
     else cons.push("High jitter suggests instability.");
-
-    const symmetric = Math.abs(down - up) / Math.max(down, 1) < 0.25;
-    if (symmetric && down > 100) pros.push("Symmetric speeds suggest fiber.");
-    else if (!symmetric && up < down / 5) cons.push("Asymmetric speeds indicate upload bottleneck.");
 
     return {
         pros: [...new Set(pros)],
@@ -328,7 +301,7 @@ function renderProsCons(pros, cons) {
 }
 
 /* ---------------------------------------------------------
-   SHARE TEXT
+   SHARE
 --------------------------------------------------------- */
 function generateShareText() {
     const r = lastResults;
