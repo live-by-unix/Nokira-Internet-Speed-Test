@@ -1,1217 +1,182 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-  <meta charset="UTF-8" />
-  <title>Nokira Internet Speed Test</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <style>
-    :root {
-      --bg-dark: #050616;
-      --bg-light: #f5f5f9;
-      --text-dark: #ffffff;
-      --text-light: #111827;
-      --accent1: #00eaff;
-      --accent2: #7b2ff7;
-      --accent3: #ff9f43;
-      --danger: #f97373;
-      --radius-card: 22px;
-      --transition-fast: 0.18s ease;
-      --transition-med: 0.3s ease;
-    }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background var(--transition-med), color var(--transition-med);
-    }
-
-    body[data-theme="dark"] {
-      background: radial-gradient(circle at top, #1b1d3f 0, #050616 55%, #02030a 100%);
-      color: var(--text-dark);
-    }
-
-    body[data-theme="light"] {
-      background: radial-gradient(circle at top, #ffffff 0, #eef1f8 60%, #e1e5f2 100%);
-      color: var(--text-light);
-    }
-
-    .app-shell {
-      width: 100%;
-      max-width: 980px;
-      padding: 20px 14px 28px;
-    }
-
-    @media (min-width: 768px) {
-      .app-shell {
-        padding: 28px 20px 36px;
-      }
-    }
-
-    .card {
-      border-radius: var(--radius-card);
-      padding: 22px 18px 26px;
-      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
-      transition: background var(--transition-med), border-color var(--transition-med), box-shadow var(--transition-med);
-    }
-
-    body[data-theme="dark"] .card {
-      background: linear-gradient(145deg, rgba(20, 22, 45, 0.98), rgba(7, 8, 26, 0.98));
-      border: 1px solid rgba(255, 255, 255, 0.05);
-    }
-
-    body[data-theme="light"] .card {
-      background: linear-gradient(145deg, #ffffff, #f5f6fb);
-      border: 1px solid rgba(15, 23, 42, 0.06);
-      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
-    }
-
-    .header-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 18px;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .brand-logo {
-      width: 34px;
-      height: 34px;
-      border-radius: 12px;
-      background: conic-gradient(from 210deg, var(--accent1), var(--accent2), var(--accent3), var(--accent1));
-      box-shadow: 0 0 18px rgba(0, 234, 255, 0.7);
-      position: relative;
-      overflow: hidden;
-    }
-
-    .brand-logo::after {
-      content: "";
-      position: absolute;
-      inset: 4px;
-      border-radius: 10px;
-      background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.4), transparent 55%);
-      mix-blend-mode: screen;
-    }
-
-    .brand-main {
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      font-size: 14px;
-    }
-
-    .brand-sub {
-      font-size: 11px;
-      opacity: 0.7;
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-    }
-
-    .theme-toggle {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 18px;
-      user-select: none;
-    }
-
-    .theme-toggle span {
-      opacity: 0.8;
-    }
-
-    .switch {
-      position: relative;
-      width: 52px;
-      height: 26px;
-      display: inline-block;
-    }
-
-    .switch input {
-      display: none;
-    }
-
-    .slider {
-      position: absolute;
-      cursor: pointer;
-      background: rgba(120, 125, 160, 0.7);
-      border-radius: 26px;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      transition: background var(--transition-fast), box-shadow var(--transition-fast);
-    }
-
-    .slider::before {
-      content: "";
-      position: absolute;
-      height: 20px;
-      width: 20px;
-      left: 3px;
-      bottom: 3px;
-      background: #ffffff;
-      border-radius: 50%;
-      transition: transform var(--transition-fast), box-shadow var(--transition-fast);
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
-    }
-
-    input:checked + .slider {
-      background: linear-gradient(90deg, var(--accent1), var(--accent2));
-      box-shadow: 0 0 12px rgba(0, 234, 255, 0.7);
-    }
-
-    input:checked + .slider::before {
-      transform: translateX(26px);
-      box-shadow: 0 2px 10px rgba(0, 234, 255, 0.7);
-    }
-
-    .stats-row {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
-      margin-bottom: 18px;
-    }
-
-    @media (min-width: 640px) {
-      .stats-row {
-        gap: 16px;
-      }
-    }
-
-    .stat-card {
-      border-radius: 16px;
-      padding: 10px 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      transition: background var(--transition-med), border-color var(--transition-med), color var(--transition-med), box-shadow var(--transition-med);
-    }
-
-    body[data-theme="dark"] .stat-card {
-      background: radial-gradient(circle at top left, rgba(123, 47, 247, 0.18), rgba(10, 11, 26, 0.96));
-      border: 1px solid rgba(255, 255, 255, 0.04);
-    }
-
-    body[data-theme="light"] .stat-card {
-      background: radial-gradient(circle at top left, rgba(0, 122, 255, 0.08), #ffffff);
-      border: 1px solid rgba(15, 23, 42, 0.06);
-    }
-
-    .stat-label {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-      opacity: 0.7;
-    }
-
-    .stat-value {
-      font-size: 18px;
-      font-weight: 600;
-    }
-
-    .stat-unit {
-      font-size: 11px;
-      opacity: 0.7;
-      margin-left: 4px;
-    }
-
-    .stat-sub {
-      font-size: 11px;
-      opacity: 0.6;
-    }
-
-    .main-layout {
-      display: flex;
-      flex-direction: column;
-      gap: 22px;
-    }
-
-    @media (min-width: 900px) {
-      .main-layout {
-        flex-direction: row;
-        align-items: stretch;
-      }
-    }
-
-    .gauge-column {
-      flex: 1.1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 18px;
-    }
-
-    .results-column {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      margin-top: 6px;
-    }
-
-    .gauge-wrapper {
-      position: relative;
-      width: min(320px, 80vw);
-      height: min(320px, 80vw);
-      margin: 0 auto;
-    }
-
-    .gauge-svg {
-      width: 100%;
-      height: 100%;
-      transform: rotate(135deg);
-    }
-
-    .gauge-bg {
-      fill: none;
-      stroke-width: 18;
-      stroke-linecap: round;
-    }
-
-    body[data-theme="dark"] .gauge-bg {
-      stroke: rgba(255, 255, 255, 0.06);
-    }
-
-    body[data-theme="light"] .gauge-bg {
-      stroke: rgba(15, 23, 42, 0.08);
-    }
-
-    .gauge-arc {
-      fill: none;
-      stroke-width: 18;
-      stroke-linecap: round;
-      stroke: url(#gaugeGradient);
-      stroke-dasharray: 503;
-      stroke-dashoffset: 503;
-      filter: drop-shadow(0 0 12px rgba(0, 234, 255, 0.7));
-      transition: stroke-dashoffset 0.4s ease-out;
-    }
-
-    .gauge-center {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      pointer-events: none;
-    }
-
-    .speed-value {
-      font-size: 46px;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-    }
-
-    .speed-unit {
-      font-size: 14px;
-      opacity: 0.7;
-      margin-top: 2px;
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-    }
-
-    .speed-label {
-      margin-top: 8px;
-      font-size: 12px;
-      opacity: 0.7;
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-    }
-
-    .gauge-scale {
-      position: absolute;
-      inset: 10%;
-      pointer-events: none;
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      padding: 0 18px 10px;
-      font-size: 10px;
-      opacity: 0.7;
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-    }
-
-    .start-btn {
-      position: relative;
-      border-radius: 999px;
-      padding: 14px 40px;
-      border: none;
-      font-size: 16px;
-      font-weight: 700;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      cursor: pointer;
-      overflow: hidden;
-      color: #ffffff;
-      background: linear-gradient(120deg, var(--accent1), var(--accent2));
-      box-shadow: 0 12px 30px rgba(0, 234, 255, 0.45);
-      transition: transform var(--transition-fast), box-shadow var(--transition-fast), opacity var(--transition-fast);
-    }
-
-    .start-btn::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(circle at 0 0, rgba(255, 255, 255, 0.4), transparent 55%);
-      opacity: 0;
-      transition: opacity var(--transition-fast);
-    }
-
-    .start-btn:hover::before {
-      opacity: 1;
-    }
-
-    .start-btn:hover {
-      transform: translateY(-1px) scale(1.02);
-      box-shadow: 0 16px 40px rgba(0, 234, 255, 0.6);
-    }
-
-    .start-btn:active {
-      transform: translateY(1px) scale(0.99);
-      box-shadow: 0 8px 20px rgba(0, 234, 255, 0.4);
-    }
-
-    .start-btn.disabled {
-      opacity: 0.5;
-      cursor: default;
-      box-shadow: none;
-    }
-
-    .status-text {
-      font-size: 12px;
-      opacity: 0.8;
-      margin-top: 4px;
-      min-height: 16px;
-      text-align: center;
-    }
-
-    .status-text strong {
-      font-weight: 600;
-    }
-
-    .error-text {
-      color: var(--danger);
-      font-size: 11px;
-      margin-top: 4px;
-      min-height: 14px;
-      text-align: center;
-    }
-
-    .results-panel {
-      border-radius: 18px;
-      padding: 14px 14px 16px;
-      overflow: hidden;
-      max-height: 0;
-      opacity: 0;
-      transform: translateY(8px);
-      transition: max-height 0.45s ease, opacity 0.35s ease, transform 0.35s ease, background var(--transition-med), border-color var(--transition-med);
-    }
-
-    body[data-theme="dark"] .results-panel {
-      background: radial-gradient(circle at top left, rgba(0, 234, 255, 0.12), rgba(10, 11, 26, 0.96));
-      border: 1px solid rgba(255, 255, 255, 0.06);
-    }
-
-    body[data-theme="light"] .results-panel {
-      background: radial-gradient(circle at top left, rgba(0, 122, 255, 0.08), #ffffff);
-      border: 1px solid rgba(15, 23, 42, 0.06);
-    }
-
-    .results-panel.visible {
-      max-height: 520px;
-      opacity: 1;
-      transform: translateY(0);
-    }
-
-    .results-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-
-    .results-title {
-      font-size: 14px;
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-      opacity: 0.8;
-    }
-
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-      padding: 3px 8px;
-      border-radius: 999px;
-    }
-
-    body[data-theme="dark"] .badge {
-      background: rgba(0, 234, 255, 0.12);
-      color: var(--accent1);
-      border: 1px solid rgba(0, 234, 255, 0.4);
-    }
-
-    body[data-theme="light"] .badge {
-      background: rgba(0, 122, 255, 0.08);
-      color: #0050c8;
-      border: 1px solid rgba(0, 122, 255, 0.4);
-    }
-
-    .badge-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 999px;
-      background: #22c55e;
-      box-shadow: 0 0 6px rgba(34, 197, 94, 0.9);
-    }
-
-    .isp-pill {
-      font-size: 11px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      white-space: nowrap;
-    }
-
-    body[data-theme="dark"] .isp-pill {
-      background: rgba(0, 234, 255, 0.12);
-      color: var(--accent1);
-      border: 1px solid rgba(0, 234, 255, 0.4);
-    }
-
-    body[data-theme="light"] .isp-pill {
-      background: rgba(0, 122, 255, 0.08);
-      color: #0050c8;
-      border: 1px solid rgba(0, 122, 255, 0.4);
-    }
-
-    .results-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-
-    .results-item-label {
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-      opacity: 0.7;
-      font-size: 11px;
-      margin-bottom: 2px;
-    }
-
-    .results-item-value {
-      font-weight: 600;
-      font-size: 14px;
-    }
-
-    .pros-cons {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-      margin-top: 6px;
-    }
-
-    @media (max-width: 640px) {
-      .pros-cons {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .pros-cons-title {
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-      font-size: 11px;
-      margin-bottom: 4px;
-    }
-
-    .pros-cons-title.pros {
-      color: #22c55e;
-    }
-
-    .pros-cons-title.cons {
-      color: var(--danger);
-    }
-
-    .pros-cons-list {
-      list-style: none;
-      font-size: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-    }
-
-    .pros-cons-list li::before {
-      content: "• ";
-      opacity: 0.7;
-    }
-
-    .share-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      margin-top: 10px;
-      flex-wrap: wrap;
-    }
-
-    .share-buttons {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .share-btn {
-      border-radius: 999px;
-      padding: 7px 14px;
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-      border: none;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      transition: transform var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
-    }
-
-    .share-btn span.icon {
-      font-size: 13px;
-    }
-
-    body[data-theme="dark"] .share-btn.primary {
-      background: linear-gradient(120deg, var(--accent1), var(--accent2));
-      color: #ffffff;
-      box-shadow: 0 8px 20px rgba(0, 234, 255, 0.4);
-    }
-
-    body[data-theme="light"] .share-btn.primary {
-      background: linear-gradient(120deg, #0077ff, #00c6ff);
-      color: #ffffff;
-      box-shadow: 0 8px 20px rgba(0, 122, 255, 0.35);
-    }
-
-    .share-btn.secondary {
-      background: transparent;
-    }
-
-    body[data-theme="dark"] .share-btn.secondary {
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      color: #e5e7f5;
-    }
-
-    body[data-theme="light"] .share-btn.secondary {
-      border: 1px solid rgba(15, 23, 42, 0.16);
-      color: #1f2937;
-    }
-
-    .share-btn:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
-    }
-
-    .share-btn:active {
-      transform: translateY(1px);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-    }
-
-    .share-caption {
-      font-size: 11px;
-      opacity: 0.7;
-    }
-
-    .footer-note {
-      margin-top: 10px;
-      font-size: 10px;
-      opacity: 0.6;
-      text-align: right;
-    }
-  </style>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nokira Internet Speed Test</title>
+
+    <!-- External CSS -->
+    <link rel="stylesheet" href="style.css" />
 </head>
+
 <body data-theme="dark">
-  <div class="app-shell">
-    <div class="card">
-      <div class="header-row">
-        <div class="brand">
-          <div class="brand-logo"></div>
-          <div>
-            <div class="brand-main">Nokira Internet Speed Test</div>
-            <div class="brand-sub">Network intelligence, not just numbers</div>
-          </div>
-        </div>
-        <div class="theme-toggle">
-          <span>🌙</span>
-          <label class="switch">
-            <input type="checkbox" id="themeSwitch" />
-            <span class="slider"></span>
-          </label>
-          <span>☀️</span>
-        </div>
-      </div>
+    <div class="app-container">
 
-      <div class="stats-row">
-        <div class="stat-card">
-          <div class="stat-label">Ping</div>
-          <div class="stat-value">
-            <span id="pingValue">--</span><span class="stat-unit">ms</span>
-          </div>
-          <div class="stat-sub">Round-trip latency</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Jitter</div>
-          <div class="stat-value">
-            <span id="jitterValue">--</span><span class="stat-unit">ms</span>
-          </div>
-          <div class="stat-sub">Latency variation</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Server</div>
-          <div class="stat-value">
-            <span id="serverValue">Cloudflare</span>
-          </div>
-          <div class="stat-sub" id="locationValue">Detecting location…</div>
-        </div>
-      </div>
-
-      <div class="main-layout">
-        <div class="gauge-column">
-          <div class="gauge-wrapper">
-            <svg class="gauge-svg" viewBox="0 0 200 200">
-              <defs>
-                <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stop-color="#00eaff" />
-                  <stop offset="50%" stop-color="#7b2ff7" />
-                  <stop offset="100%" stop-color="#ff9f43" />
-                </linearGradient>
-              </defs>
-              <circle class="gauge-bg" cx="100" cy="100" r="80" />
-              <circle id="gaugeArc" class="gauge-arc" cx="100" cy="100" r="80" />
-            </svg>
-            <div class="gauge-center">
-              <div class="speed-value" id="speedValue">0.00</div>
-              <div class="speed-unit">Mbps</div>
-              <div class="speed-label" id="speedLabel">Ready</div>
-            </div>
-            <div class="gauge-scale">
-              <span>0</span>
-              <span>100</span>
-              <span>500+</span>
-            </div>
-          </div>
-          <button class="start-btn" id="startBtn">
-            Start Test
-          </button>
-          <div class="status-text" id="statusText"></div>
-          <div class="error-text" id="errorText"></div>
-        </div>
-
-        <div class="results-column">
-          <div class="results-panel" id="resultsPanel">
-            <div class="results-header">
-              <div>
-                <div class="results-title">Network analysis</div>
-                <div class="badge">
-                  <span class="badge-dot"></span>
-                  <span>Live from your line</span>
+        <!-- HEADER -->
+        <header class="header">
+            <div class="brand">
+                <div class="brand-logo"></div>
+                <div class="brand-text">
+                    <div class="brand-title">Nokira Internet Speed Test</div>
+                    <div class="brand-subtitle">Network intelligence, not just numbers</div>
                 </div>
-              </div>
-              <div class="isp-pill" id="ispPill">Detecting ISP…</div>
             </div>
 
-            <div class="results-grid">
-              <div>
-                <div class="results-item-label">Download</div>
-                <div class="results-item-value"><span id="downResult">--</span> Mbps</div>
-              </div>
-              <div>
-                <div class="results-item-label">Upload</div>
-                <div class="results-item-value"><span id="upResult">--</span> Mbps</div>
-              </div>
-              <div>
-                <div class="results-item-label">Ping</div>
-                <div class="results-item-value"><span id="pingResult">--</span> ms</div>
-              </div>
-              <div>
-                <div class="results-item-label">Jitter</div>
-                <div class="results-item-value"><span id="jitterResult">--</span> ms</div>
-              </div>
+            <div class="theme-toggle">
+                <span class="theme-icon">🌙</span>
+                <label class="switch">
+                    <input type="checkbox" id="themeSwitch" />
+                    <span class="slider"></span>
+                </label>
+                <span class="theme-icon">☀️</span>
             </div>
+        </header>
 
-            <div class="pros-cons">
-              <div>
-                <div class="pros-cons-title pros">Pros</div>
-                <ul class="pros-cons-list" id="prosList"></ul>
-              </div>
-              <div>
-                <div class="pros-cons-title cons">Cons</div>
-                <ul class="pros-cons-list" id="consList"></ul>
-              </div>
-            </div>
+        <!-- MAIN LAYOUT -->
+        <main class="main-layout">
 
-            <div class="share-row">
-              <div class="share-buttons">
-                <button class="share-btn primary" id="copyBtn">
-                  <span class="icon">📋</span>
-                  <span>Copy Results</span>
-                </button>
-                <button class="share-btn secondary" id="emailBtn">
-                  <span class="icon">✉️</span>
-                  <span>Email Results</span>
-                </button>
-              </div>
-              <div class="share-caption">
-                Copy & paste into chat to brag about your line.
-              </div>
-            </div>
+            <!-- LEFT: GAUGE + START BUTTON -->
+            <section class="gauge-section">
 
-            <div class="footer-note">
-              Estimates based on live measurements, not marketing speeds.
-            </div>
-          </div>
-        </div>
-      </div>
+                <div class="gauge-wrapper">
+                    <svg class="gauge-svg" viewBox="0 0 200 200">
+                        <defs>
+                            <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="#00eaff" />
+                                <stop offset="50%" stop-color="#7b2ff7" />
+                                <stop offset="100%" stop-color="#ff9f43" />
+                            </linearGradient>
+                        </defs>
+
+                        <!-- Background circle -->
+                        <circle class="gauge-bg" cx="100" cy="100" r="80" />
+
+                        <!-- Animated arc -->
+                        <circle id="gaugeArc" class="gauge-arc" cx="100" cy="100" r="80" />
+                    </svg>
+
+                    <div class="gauge-center">
+                        <div id="speedValue" class="speed-value">0.00</div>
+                        <div class="speed-unit">Mbps</div>
+                        <div id="speedLabel" class="speed-label">Ready</div>
+                    </div>
+
+                    <div class="gauge-scale">
+                        <span>0</span>
+                        <span>100</span>
+                        <span>500+</span>
+                    </div>
+                </div>
+
+                <button id="startBtn" class="start-btn">Start Test</button>
+                <div id="statusText" class="status-text"></div>
+                <div id="errorText" class="error-text"></div>
+
+            </section>
+
+            <!-- RIGHT: RESULTS PANEL (SCROLLABLE) -->
+            <section class="results-section">
+
+                <div class="results-panel" id="resultsPanel">
+
+                    <!-- HEADER -->
+                    <div class="results-header">
+                        <div class="results-title-group">
+                            <div class="results-title">Network Analysis</div>
+                            <div class="badge">
+                                <span class="badge-dot"></span>
+                                <span>Live from your line</span>
+                            </div>
+                        </div>
+
+                        <div id="ispPill" class="isp-pill">Detecting ISP…</div>
+                    </div>
+
+                    <!-- QUICK STATS -->
+                    <div class="quick-stats">
+                        <div class="stat">
+                            <div class="stat-label">Ping</div>
+                            <div class="stat-value"><span id="pingValue">--</span> ms</div>
+                        </div>
+
+                        <div class="stat">
+                            <div class="stat-label">Jitter</div>
+                            <div class="stat-value"><span id="jitterValue">--</span> ms</div>
+                        </div>
+
+                        <div class="stat">
+                            <div class="stat-label">Server</div>
+                            <div class="stat-value" id="serverValue">Cloudflare</div>
+                            <div class="stat-sub" id="locationValue">Detecting location…</div>
+                        </div>
+                    </div>
+
+                    <!-- RESULTS GRID -->
+                    <div class="results-grid">
+                        <div class="result-item">
+                            <div class="result-label">Download</div>
+                            <div class="result-value"><span id="downResult">--</span> Mbps</div>
+                        </div>
+
+                        <div class="result-item">
+                            <div class="result-label">Upload</div>
+                            <div class="result-value"><span id="upResult">--</span> Mbps</div>
+                        </div>
+
+                        <div class="result-item">
+                            <div class="result-label">Ping</div>
+                            <div class="result-value"><span id="pingResult">--</span> ms</div>
+                        </div>
+
+                        <div class="result-item">
+                            <div class="result-label">Jitter</div>
+                            <div class="result-value"><span id="jitterResult">--</span> ms</div>
+                        </div>
+                    </div>
+
+                    <!-- PROS & CONS -->
+                    <div class="pros-cons">
+                        <div class="pros">
+                            <div class="pros-title">Pros</div>
+                            <ul id="prosList" class="pros-list"></ul>
+                        </div>
+
+                        <div class="cons">
+                            <div class="cons-title">Cons</div>
+                            <ul id="consList" class="cons-list"></ul>
+                        </div>
+                    </div>
+
+                    <!-- SHARE BUTTONS -->
+                    <div class="share-row">
+                        <div class="share-buttons">
+                            <button id="copyBtn" class="share-btn primary">
+                                <span class="icon">📋</span> Copy Results
+                            </button>
+
+                            <button id="emailBtn" class="share-btn secondary">
+                                <span class="icon">✉️</span> Email Results
+                            </button>
+                        </div>
+
+                        <div class="share-caption">
+                            Copy & paste into chat to brag about your line.
+                        </div>
+                    </div>
+
+                    <div class="footer-note">
+                        Estimates based on live measurements, not marketing speeds.
+                    </div>
+
+                </div>
+
+            </section>
+
+        </main>
+
     </div>
-  </div>
 
-  <script>
-    const themeSwitch = document.getElementById("themeSwitch");
-    const startBtn = document.getElementById("startBtn");
-    const statusText = document.getElementById("statusText");
-    const errorText = document.getElementById("errorText");
-    const speedValueEl = document.getElementById("speedValue");
-    const speedLabelEl = document.getElementById("speedLabel");
-    const gaugeArc = document.getElementById("gaugeArc");
-    const pingValueEl = document.getElementById("pingValue");
-    const jitterValueEl = document.getElementById("jitterValue");
-    const serverValueEl = document.getElementById("serverValue");
-    const locationValueEl = document.getElementById("locationValue");
-    const resultsPanel = document.getElementById("resultsPanel");
-    const ispPill = document.getElementById("ispPill");
-    const downResultEl = document.getElementById("downResult");
-    const upResultEl = document.getElementById("upResult");
-    const pingResultEl = document.getElementById("pingResult");
-    const jitterResultEl = document.getElementById("jitterResult");
-    const prosListEl = document.getElementById("prosList");
-    const consListEl = document.getElementById("consList");
-    const copyBtn = document.getElementById("copyBtn");
-    const emailBtn = document.getElementById("emailBtn");
-
-    const GAUGE_MAX_MBPS = 500;
-    const GAUGE_LENGTH = 503; // 2πr for r=80 ≈ 502.65
-
-    const CLOUDFLARE_PING_URL = "https://speed.cloudflare.com/__down?bytes=1";
-    const CLOUDFLARE_DOWNLOAD_URL = "https://speed.cloudflare.com/__down?bytes=20000000";
-    const CLOUDFLARE_UPLOAD_URL = "https://speed.cloudflare.com/__up";
-    const IP_INFO_URL = "https://ipapi.co/json/"; // no token
-
-    let lastSpeedDisplay = 0;
-    let currentTheme = "dark";
-
-    let lastResults = {
-      download: null,
-      upload: null,
-      ping: null,
-      jitter: null,
-      isp: "Unknown",
-      ip: null,
-      city: null,
-      region: null,
-      country: null,
-    };
-
-    function initTheme() {
-      const saved = localStorage.getItem("nokira-theme");
-      currentTheme = saved === "light" ? "light" : "dark";
-      document.body.setAttribute("data-theme", currentTheme);
-      themeSwitch.checked = currentTheme === "light";
-    }
-
-    themeSwitch.addEventListener("change", () => {
-      currentTheme = themeSwitch.checked ? "light" : "dark";
-      document.body.setAttribute("data-theme", currentTheme);
-      localStorage.setItem("nokira-theme", currentTheme);
-    });
-
-    function animateSpeed(target, label) {
-      const start = lastSpeedDisplay;
-      const end = target;
-      const duration = 600;
-      const startTime = performance.now();
-
-      function step(now) {
-        const t = Math.min(1, (now - startTime) / duration);
-        const eased = 1 - Math.pow(1 - t, 3);
-        const value = start + (end - start) * eased;
-        speedValueEl.textContent = value.toFixed(2);
-        if (t < 1) {
-          requestAnimationFrame(step);
-        } else {
-          lastSpeedDisplay = end;
-        }
-      }
-      speedLabelEl.textContent = label;
-      requestAnimationFrame(step);
-    }
-
-    function updateGauge(mbps) {
-      const clamped = Math.max(0, Math.min(GAUGE_MAX_MBPS, mbps));
-      const ratio = clamped / GAUGE_MAX_MBPS;
-      const offset = GAUGE_LENGTH - GAUGE_LENGTH * ratio;
-      gaugeArc.style.strokeDashoffset = offset.toString();
-    }
-
-    async function measurePingAndJitter(iterations = 8) {
-      const times = [];
-      for (let i = 0; i < iterations; i++) {
-        const start = performance.now();
-        try {
-          await fetch(CLOUDFLARE_PING_URL, { cache: "no-store" });
-          const end = performance.now();
-          times.push(end - start);
-        } catch (e) {
-          times.push(200);
-        }
-      }
-      const avg = times.reduce((a, b) => a + b, 0) / (times.length || 1);
-      const jitter =
-        times.length > 1
-          ? Math.sqrt(
-              times
-                .map((t) => Math.pow(t - avg, 2))
-                .reduce((a, b) => a + b, 0) /
-                (times.length - 1)
-            )
-          : 0;
-      return { ping: avg, jitter };
-    }
-
-    async function measureDownload() {
-      const startTime = performance.now();
-      let bytes = 0;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 20000);
-
-      try {
-        const response = await fetch(CLOUDFLARE_DOWNLOAD_URL, {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        const reader = response.body.getReader();
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          bytes += value.length;
-          const elapsed = (performance.now() - startTime) / 1000;
-          if (elapsed > 0.5) {
-            const mbps = (bytes * 8) / elapsed / 1_000_000;
-            animateSpeed(mbps, "Measuring download…");
-            updateGauge(mbps);
-          }
-        }
-      } catch (e) {
-        clearTimeout(timeout);
-        throw e;
-      }
-      clearTimeout(timeout);
-      const totalSeconds = (performance.now() - startTime) / 1000;
-      const mbps = (bytes * 8) / totalSeconds / 1_000_000;
-      return mbps;
-    }
-
-    async function measureUpload() {
-      const sizeBytes = 4_000_000;
-      const payload = new Uint8Array(sizeBytes);
-      crypto.getRandomValues(payload);
-      const startTime = performance.now();
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 20000);
-
-      try {
-        await fetch(CLOUDFLARE_UPLOAD_URL, {
-          method: "POST",
-          body: payload,
-          signal: controller.signal,
-        });
-      } catch (e) {
-        clearTimeout(timeout);
-        throw e;
-      }
-      clearTimeout(timeout);
-      const totalSeconds = (performance.now() - startTime) / 1000;
-      const mbps = (sizeBytes * 8) / totalSeconds / 1_000_000;
-      return mbps;
-    }
-
-    async function fetchIPInfo() {
-      try {
-        const res = await fetch(IP_INFO_URL, { cache: "no-store" });
-        if (!res.ok) throw new Error("IP API error");
-        const data = await res.json();
-        return {
-          ip: data.ip || null,
-          isp: data.org || data.asn || "Unknown",
-          city: data.city || null,
-          region: data.region || null,
-          country: data.country_name || null,
-        };
-      } catch (e) {
-        return {
-          ip: null,
-          isp: "Unknown",
-          city: null,
-          region: null,
-          country: null,
-        };
-      }
-    }
-
-    function guessISP(ipInfo, down, up, ping) {
-      const ispRaw = ipInfo.isp || "Unknown";
-      const ispLower = ispRaw.toLowerCase();
-      const symmetric = Math.abs(down - up) / Math.max(down, 1) < 0.25;
-
-      if (ispLower.includes("google")) return "Likely Google Fiber";
-      if (ispLower.includes("comcast") || ispLower.includes("xfinity")) return "Likely Xfinity (Comcast)";
-      if (ispLower.includes("charter") || ispLower.includes("spectrum")) return "Likely Spectrum";
-      if (ispLower.includes("verizon")) {
-        if (symmetric && down > 200) return "Likely Verizon Fios";
-        return "Likely Verizon";
-      }
-      if (ispLower.includes("at&t") || ispLower.includes("att")) {
-        if (symmetric && down > 200) return "Likely AT&T Fiber";
-        return "Likely AT&T";
-      }
-      if (ispLower.includes("cox")) return "Likely Cox Communications";
-      if (ispLower.includes("rogers")) return "Likely Rogers";
-      if (ispLower.includes("bell")) return "Likely Bell";
-      if (ispLower.includes("telus")) return "Likely Telus";
-      if (ispLower.includes("bt-") || ispLower.includes("british telecom")) return "Likely BT";
-      if (ispLower.includes("virgin")) return "Likely Virgin Media";
-
-      if (symmetric && down > 300) return "Likely fiber provider";
-      if (!symmetric && down > 50 && up < 40) return "Likely cable provider";
-      if (ping > 60 && down < 50) return "Possibly wireless / LTE / 5G";
-
-      return ispRaw;
-    }
-
-    function analyzeNetwork(down, up, ping, jitter) {
-      const pros = [];
-      const cons = [];
-
-      if (down >= 500) {
-        pros.push("Excellent for 4K streaming, cloud gaming, and heavy downloads.");
-        pros.push("Plenty of headroom for multiple users and devices.");
-      } else if (down >= 200) {
-        pros.push("Great for HD/4K streaming and most online tasks.");
-        pros.push("Comfortable for a busy household.");
-      } else if (down >= 50) {
-        pros.push("Good for HD streaming and everyday browsing.");
-      } else if (down >= 25) {
-        pros.push("Adequate for basic streaming and browsing.");
-      } else {
-        cons.push("Download speed is low for modern streaming and downloads.");
-      }
-
-      if (up >= 100) {
-        pros.push("Fantastic upload for streaming, backups, and content creation.");
-      } else if (up >= 20) {
-        pros.push("Strong upload for video calls and cloud storage.");
-      } else if (up >= 5) {
-        pros.push("Upload is fine for casual video calls.");
-      } else {
-        cons.push("Upload speed may cause issues with video calls and uploads.");
-      }
-
-      if (ping <= 20) {
-        pros.push("Latency is excellent for competitive gaming.");
-      } else if (ping <= 40) {
-        pros.push("Latency is good for most real-time applications.");
-      } else if (ping <= 70) {
-        cons.push("Latency may be noticeable in fast-paced online games.");
-      } else {
-        cons.push("High latency will affect gaming and real-time apps.");
-      }
-
-      if (jitter <= 10) {
-        pros.push("Connection stability is good for calls and streaming.");
-      } else if (jitter <= 25) {
-        cons.push("Some jitter may cause occasional glitches in calls.");
-      } else {
-        cons.push("High jitter suggests an unstable connection.");
-      }
-
-      const symmetric = Math.abs(down - up) / Math.max(down, 1) < 0.25;
-      if (symmetric && down > 100) {
-        pros.push("Symmetric speeds suggest a high-quality fiber connection.");
-      } else if (!symmetric && up < down / 5) {
-        cons.push("Asymmetric speeds indicate upload could be a bottleneck.");
-      }
-
-      const uniquePros = [...new Set(pros)];
-      const uniqueCons = [...new Set(cons)];
-
-      while (uniquePros.length < 3) uniquePros.push("Works for basic browsing and messaging.");
-      while (uniqueCons.length < 3) uniqueCons.push("Performance may vary depending on Wi‑Fi quality and local congestion.");
-
-      return { pros: uniquePros, cons: uniqueCons };
-    }
-
-    function renderProsCons(pros, cons) {
-      prosListEl.innerHTML = "";
-      consListEl.innerHTML = "";
-      pros.forEach((p) => {
-        const li = document.createElement("li");
-        li.textContent = p;
-        prosListEl.appendChild(li);
-      });
-      cons.forEach((c) => {
-        const li = document.createElement("li");
-        li.textContent = c;
-        consListEl.appendChild(li);
-      });
-    }
-
-    function generateShareText() {
-      const r = lastResults;
-      const prosItems = Array.from(prosListEl.children).map((li) => li.textContent);
-      const consItems = Array.from(consListEl.children).map((li) => li.textContent);
-
-      return (
-        "📡 Nokira Internet Speed Test Results\n" +
-        "-----------------------------------\n" +
-        (r.ip ? `IP: ${r.ip}\n` : "") +
-        (r.city || r.region || r.country
-          ? `Location: ${[r.city, r.region, r.country].filter(Boolean).join(", ")}\n`
-          : "") +
-        `Download: ${r.download?.toFixed(2) ?? "--"} Mbps\n` +
-        `Upload:   ${r.upload?.toFixed(2) ?? "--"} Mbps\n` +
-        `Ping:     ${r.ping?.toFixed(1) ?? "--"} ms\n` +
-        `Jitter:   ${r.jitter?.toFixed(1) ?? "--"} ms\n` +
-        `ISP:      ${r.isp}\n\n` +
-        "Pros:\n" +
-        prosItems.map((p) => "- " + p).join("\n") +
-        "\n\nCons:\n" +
-        consItems.map((c) => "- " + c).join("\n") +
-        "\n\nTested with Nokira Internet Speed Test."
-      );
-    }
-
-    copyBtn.addEventListener("click", async () => {
-      try {
-        const text = generateShareText();
-        await navigator.clipboard.writeText(text);
-        statusText.innerHTML = "<strong>Copied!</strong> Paste it into chat and flex.";
-      } catch (e) {
-        statusText.textContent = "Could not copy to clipboard. You can still select and copy manually.";
-      }
-    });
-
-    emailBtn.addEventListener("click", () => {
-      const subject = encodeURIComponent("My Nokira Internet Speed Test Results");
-      const body = encodeURIComponent(generateShareText());
-      const mailto = `mailto:?subject=${subject}&body=${body}`;
-      window.location.href = mailto;
-    });
-
-    function setStatus(msg) {
-      statusText.textContent = msg;
-    }
-
-    function setError(msg) {
-      errorText.textContent = msg || "";
-    }
-
-    async function runTest() {
-      if (startBtn.classList.contains("disabled")) return;
-
-      startBtn.classList.add("disabled");
-      setError("");
-      resultsPanel.classList.remove("visible");
-      setStatus("Preparing test…");
-      animateSpeed(0, "Preparing…");
-      updateGauge(0);
-
-      try {
-        const ipInfo = await fetchIPInfo();
-        lastResults.ip = ipInfo.ip;
-        lastResults.city = ipInfo.city;
-        lastResults.region = ipInfo.region;
-        lastResults.country = ipInfo.country;
-
-        const locParts = [ipInfo.city, ipInfo.region, ipInfo.country].filter(Boolean);
-        locationValueEl.textContent = locParts.length ? locParts.join(", ") : "Location unavailable";
-        serverValueEl.textContent = "Cloudflare" + (ipInfo.country ? " (" + ipInfo.country + ")" : "");
-
-        ispPill.textContent = ipInfo.isp || "Unknown ISP";
-
-        setStatus("Measuring ping and jitter…");
-        const { ping, jitter } = await measurePingAndJitter();
-        lastResults.ping = ping;
-        lastResults.jitter = jitter;
-        pingValueEl.textContent = ping.toFixed(1);
-        jitterValueEl.textContent = jitter.toFixed(1);
-        pingResultEl.textContent = ping.toFixed(1);
-        jitterResultEl.textContent = jitter.toFixed(1);
-
-        animateSpeed(0, "Measuring download…");
-        setStatus("Measuring download speed…");
-        const down = await measureDownload();
-        lastResults.download = down;
-        downResultEl.textContent = down.toFixed(2);
-        animateSpeed(down, "Download");
-        updateGauge(down);
-
-        setStatus("Measuring upload speed…");
-        const up = await measureUpload();
-        lastResults.upload = up;
-        upResultEl.textContent = up.toFixed(2);
-        animateSpeed(down, "Download (peak)");
-        updateGauge(down);
-
-        const ispGuess = guessISP(ipInfo, down, up, ping);
-        lastResults.isp = ispGuess;
-        ispPill.textContent = ispGuess;
-
-        const { pros, cons } = analyzeNetwork(down, up, ping, jitter);
-        renderProsCons(pros, cons);
-
-        resultsPanel.classList.add("visible");
-        setStatus("Done. Scroll your analysis, then copy or email your results.");
-      } catch (e) {
-        console.error(e);
-        setError("Something went wrong during the test. Try again. Some networks or browsers may block speed test traffic.");
-        setStatus("Test failed.");
-      } finally {
-        startBtn.classList.remove("disabled");
-      }
-    }
-
-    startBtn.addEventListener("click", runTest);
-
-    initTheme();
-    setStatus("Ready when you are. Hit Start to test your line.");
-  </script>
+    <!-- External JS -->
+    <script src="script.js"></script>
 </body>
 </html>
