@@ -34,8 +34,10 @@ const GAUGE_LENGTH = 503;
 /* Endpoints */
 const CF_PING = "https://speed.cloudflare.com/__down?bytes=1";
 const CF_DOWN = "https://speed.cloudflare.com/__down?bytes=";
-// USE YOUR WORKER URL FOR UPLOAD:
+
+// YOUR WORKER URL (upload proxy)
 const CF_UP = "https://nokira-api.live-by-unix.workers.dev/";
+
 const IP_INFO = "https://ipapi.co/json/";
 
 /* STATE */
@@ -167,39 +169,23 @@ async function measureDownload() {
 }
 
 /* ---------------------------------------------------------
-   UPLOAD (via your Worker)
+   UPLOAD (NO STREAMING IN BROWSER — STREAMS IN WORKER)
 --------------------------------------------------------- */
 async function measureUpload() {
-    let totalBytes = 4_000_000;
-    const chunkSize = 64 * 1024;
-    const chunk = new Uint8Array(chunkSize);
-    crypto.getRandomValues(chunk);
+    const sizeBytes = 4_000_000;
+    const payload = new Uint8Array(sizeBytes);
+    crypto.getRandomValues(payload);
 
     const start = performance.now();
 
-    const stream = new ReadableStream({
-        async pull(controller) {
-            if (totalBytes <= 0) {
-                controller.close();
-                return;
-            }
-            controller.enqueue(chunk);
-            totalBytes -= chunkSize;
-            await new Promise((r) => setTimeout(r, 0));
-        },
-    });
-
-    // Browser sends to your Worker (CORS‑safe)
+    // Browser sends a normal Uint8Array → Worker streams it upstream
     await fetch(CF_UP, {
         method: "POST",
-        body: stream,
-        // no duplex here: that's only needed in the browser when
-        // sending directly to a server that expects streaming.
-        // The Worker handles the upstream to Cloudflare.
+        body: payload,
     });
 
     const totalSeconds = (performance.now() - start) / 1000;
-    return (4_000_000 * 8) / totalSeconds / 1_000_000;
+    return (sizeBytes * 8) / totalSeconds / 1_000_000;
 }
 
 /* ---------------------------------------------------------
