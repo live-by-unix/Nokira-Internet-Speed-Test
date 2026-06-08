@@ -1,0 +1,496 @@
+/* ---------------------------------------------------------
+   Nokira Internet Speed Test — style.css
+   Blend of U1 (professional) + U2 (futuristic neon Nokira)
+   Layout: Gauge Left (40%) | Results Right (60%)
+   Results panel scrolls independently (S1)
+--------------------------------------------------------- */
+
+/* ROOT THEME VARIABLES */
+:root {
+    --bg-dark: #050616;
+    --bg-light: #f5f5f9;
+
+    --text-dark: #ffffff;
+    --text-light: #111827;
+
+    --accent1: #00eaff;
+    --accent2: #7b2ff7;
+    --accent3: #ff9f43;
+
+    --danger: #f97373;
+
+    --glass-dark: rgba(255, 255, 255, 0.06);
+    --glass-light: rgba(15, 23, 42, 0.06);
+
+    --radius-card: 22px;
+    --transition-fast: 0.18s ease;
+    --transition-med: 0.3s ease;
+}
+
+/* RESET */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    background: var(--bg-dark);
+    color: var(--text-dark);
+    transition: background var(--transition-med), color var(--transition-med);
+}
+
+/* LIGHT MODE */
+body[data-theme="light"] {
+    background: var(--bg-light);
+    color: var(--text-light);
+}
+
+/* APP CONTAINER */
+.app-container {
+    width: 100%;
+    max-width: 1300px;
+    padding: 24px;
+}
+
+/* ---------------------------------------------------------
+   HEADER
+--------------------------------------------------------- */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 26px;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.brand-logo {
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
+    background: conic-gradient(from 210deg, var(--accent1), var(--accent2), var(--accent3), var(--accent1));
+    box-shadow: 0 0 18px rgba(0, 234, 255, 0.7);
+    position: relative;
+    overflow: hidden;
+}
+
+.brand-logo::after {
+    content: "";
+    position: absolute;
+    inset: 5px;
+    border-radius: 12px;
+    background: radial-gradient(circle at 30% 20%, rgba(255,255,255,0.4), transparent 55%);
+    mix-blend-mode: screen;
+}
+
+.brand-title {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.brand-subtitle {
+    font-size: 11px;
+    opacity: 0.7;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+}
+
+/* THEME TOGGLE */
+.theme-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.theme-icon {
+    font-size: 18px;
+    opacity: 0.8;
+}
+
+.switch {
+    position: relative;
+    width: 52px;
+    height: 26px;
+}
+
+.switch input {
+    display: none;
+}
+
+.slider {
+    position: absolute;
+    inset: 0;
+    background: rgba(120, 125, 160, 0.7);
+    border-radius: 26px;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.slider::before {
+    content: "";
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    left: 3px;
+    bottom: 3px;
+    background: #ffffff;
+    border-radius: 50%;
+    transition: transform var(--transition-fast);
+}
+
+input:checked + .slider {
+    background: linear-gradient(90deg, var(--accent1), var(--accent2));
+}
+
+input:checked + .slider::before {
+    transform: translateX(26px);
+}
+
+/* ---------------------------------------------------------
+   MAIN LAYOUT
+--------------------------------------------------------- */
+.main-layout {
+    display: flex;
+    gap: 24px;
+}
+
+/* LEFT SIDE — GAUGE */
+.gauge-section {
+    flex: 0 0 40%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+}
+
+/* GAUGE */
+.gauge-wrapper {
+    position: relative;
+    width: 100%;
+    max-width: 360px;
+    aspect-ratio: 1;
+}
+
+.gauge-svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.gauge-bg {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.08);
+    stroke-width: 18;
+}
+
+body[data-theme="light"] .gauge-bg {
+    stroke: rgba(15, 23, 42, 0.08);
+}
+
+.gauge-arc {
+    fill: none;
+    stroke: url(#gaugeGradient);
+    stroke-width: 18;
+    stroke-linecap: round;
+    stroke-dasharray: 503;
+    stroke-dashoffset: 503;
+    filter: drop-shadow(0 0 12px rgba(0, 234, 255, 0.7));
+    transition: stroke-dashoffset 0.4s ease-out;
+}
+
+/* GAUGE CENTER TEXT */
+.gauge-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.speed-value {
+    font-size: 48px;
+    font-weight: 700;
+}
+
+.speed-unit {
+    font-size: 14px;
+    opacity: 0.7;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+}
+
+.speed-label {
+    margin-top: 6px;
+    font-size: 12px;
+    opacity: 0.7;
+    text-transform: uppercase;
+}
+
+/* SCALE */
+.gauge-scale {
+    position: absolute;
+    inset: 10%;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 0 16px 10px;
+    font-size: 10px;
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+/* START BUTTON */
+.start-btn {
+    padding: 14px 40px;
+    border-radius: 999px;
+    border: none;
+    font-size: 16px;
+    font-weight: 700;
+    text-transform: uppercase;
+    background: linear-gradient(120deg, var(--accent1), var(--accent2));
+    color: #fff;
+    cursor: pointer;
+    box-shadow: 0 12px 30px rgba(0, 234, 255, 0.45);
+    transition: transform var(--transition-fast);
+}
+
+.start-btn:hover {
+    transform: translateY(-2px) scale(1.02);
+}
+
+.start-btn.disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+/* STATUS TEXT */
+.status-text {
+    font-size: 12px;
+    opacity: 0.8;
+    min-height: 16px;
+}
+
+.error-text {
+    font-size: 11px;
+    color: var(--danger);
+    min-height: 14px;
+}
+
+/* ---------------------------------------------------------
+   RIGHT SIDE — RESULTS PANEL (SCROLLABLE)
+--------------------------------------------------------- */
+.results-section {
+    flex: 0 0 60%;
+    height: 600px;
+    overflow-y: auto;
+    padding-right: 6px;
+}
+
+.results-panel {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 18px;
+    padding: 18px;
+    backdrop-filter: blur(14px);
+}
+
+body[data-theme="light"] .results-panel {
+    background: rgba(255, 255, 255, 0.6);
+    border-color: rgba(15, 23, 42, 0.1);
+}
+
+/* RESULTS HEADER */
+.results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.results-title {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    opacity: 0.8;
+}
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    background: rgba(0, 234, 255, 0.12);
+    border: 1px solid rgba(0, 234, 255, 0.4);
+    color: var(--accent1);
+}
+
+.badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: #22c55e;
+    box-shadow: 0 0 6px rgba(34, 197, 94, 0.9);
+}
+
+.isp-pill {
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    background: rgba(0, 234, 255, 0.12);
+    border: 1px solid rgba(0, 234, 255, 0.4);
+    color: var(--accent1);
+}
+
+/* QUICK STATS */
+.quick-stats {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+.stat {
+    flex: 1;
+}
+
+.stat-label {
+    font-size: 11px;
+    opacity: 0.7;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+}
+
+.stat-value {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.stat-sub {
+    font-size: 11px;
+    opacity: 0.6;
+}
+
+/* RESULTS GRID */
+.results-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+.result-label {
+    font-size: 11px;
+    opacity: 0.7;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+}
+
+.result-value {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+/* PROS & CONS */
+.pros-cons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+    margin-bottom: 18px;
+}
+
+.pros-title,
+.cons-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    margin-bottom: 6px;
+}
+
+.pros-title {
+    color: #22c55e;
+}
+
+.cons-title {
+    color: var(--danger);
+}
+
+.pros-list,
+.cons-list {
+    list-style: none;
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.pros-list li::before,
+.cons-list li::before {
+    content: "• ";
+    opacity: 0.7;
+}
+
+/* SHARE BUTTONS */
+.share-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.share-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.share-btn {
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    cursor: pointer;
+    border: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.share-btn.primary {
+    background: linear-gradient(120deg, var(--accent1), var(--accent2));
+    color: #fff;
+}
+
+.share-btn.secondary {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: #e5e7f5;
+}
+
+.share-caption {
+    font-size: 11px;
+    opacity: 0.7;
+}
+
+.footer-note {
+    font-size: 10px;
+    opacity: 0.6;
+    margin-top: 10px;
+}
