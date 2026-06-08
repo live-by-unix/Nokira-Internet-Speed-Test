@@ -169,16 +169,16 @@ async function measureDownload() {
 }
 
 /* ---------------------------------------------------------
-   UPLOAD (NO STREAMING IN BROWSER — STREAMS IN WORKER)
+   UPLOAD (ZERO‑FILL BUFFER — CHROME SAFE)
 --------------------------------------------------------- */
 async function measureUpload() {
     const sizeBytes = 4_000_000;
+
+    // Zero-filled buffer (Chrome-safe)
     const payload = new Uint8Array(sizeBytes);
-    crypto.getRandomValues(payload);
 
     const start = performance.now();
 
-    // Browser sends a normal Uint8Array → Worker streams it upstream
     await fetch(CF_UP, {
         method: "POST",
         body: payload,
