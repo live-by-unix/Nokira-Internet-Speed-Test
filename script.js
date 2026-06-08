@@ -31,10 +31,11 @@ const emailBtn = document.getElementById("emailBtn");
 const GAUGE_MAX_MBPS = 500;
 const GAUGE_LENGTH = 503;
 
-/* Cloudflare Endpoints */
+/* Endpoints */
 const CF_PING = "https://speed.cloudflare.com/__down?bytes=1";
 const CF_DOWN = "https://speed.cloudflare.com/__down?bytes=";
-const CF_UP = "https://speed.cloudflare.com/__up";
+// USE YOUR WORKER URL FOR UPLOAD:
+const CF_UP = "https://nokira-api.live-by-unix.workers.dev/";
 const IP_INFO = "https://ipapi.co/json/";
 
 /* STATE */
@@ -68,7 +69,7 @@ themeSwitch.addEventListener("change", () => {
 });
 
 /* ---------------------------------------------------------
-   GAUGE ANIMATION
+   GAUGE
 --------------------------------------------------------- */
 function animateSpeed(target, label) {
     const start = lastSpeedDisplay;
@@ -112,7 +113,6 @@ async function measurePingAndJitter(iter = 10) {
     }
 
     const avg = times.reduce((a, b) => a + b, 0) / times.length;
-
     const jitter =
         Math.sqrt(
             times
@@ -124,10 +124,10 @@ async function measurePingAndJitter(iter = 10) {
 }
 
 /* ---------------------------------------------------------
-   ADAPTIVE DOWNLOAD TEST
+   DOWNLOAD
 --------------------------------------------------------- */
 async function measureDownload() {
-    let size = 20_000_000; // 20MB
+    let size = 20_000_000;
     let bytes = 0;
     const start = performance.now();
 
@@ -167,7 +167,7 @@ async function measureDownload() {
 }
 
 /* ---------------------------------------------------------
-   STREAMING UPLOAD (Chrome‑safe)
+   UPLOAD (via your Worker)
 --------------------------------------------------------- */
 async function measureUpload() {
     let totalBytes = 4_000_000;
@@ -185,15 +185,17 @@ async function measureUpload() {
             }
             controller.enqueue(chunk);
             totalBytes -= chunkSize;
-
             await new Promise((r) => setTimeout(r, 0));
         },
     });
 
+    // Browser sends to your Worker (CORS‑safe)
     await fetch(CF_UP, {
         method: "POST",
         body: stream,
-        duplex: "half",
+        // no duplex here: that's only needed in the browser when
+        // sending directly to a server that expects streaming.
+        // The Worker handles the upstream to Cloudflare.
     });
 
     const totalSeconds = (performance.now() - start) / 1000;
@@ -227,7 +229,7 @@ async function fetchIPInfo() {
 }
 
 /* ---------------------------------------------------------
-   ISP GUESSING
+   ISP GUESS
 --------------------------------------------------------- */
 function guessISP(info, down, up, ping) {
     const isp = (info.isp || "").toLowerCase();
@@ -252,7 +254,7 @@ function guessISP(info, down, up, ping) {
 }
 
 /* ---------------------------------------------------------
-   PROS / CONS ENGINE
+   PROS / CONS
 --------------------------------------------------------- */
 function analyzeNetwork(down, up, ping, jitter) {
     const pros = [];
@@ -345,7 +347,7 @@ emailBtn.addEventListener("click", () => {
 });
 
 /* ---------------------------------------------------------
-   MAIN TEST RUNNER
+   MAIN TEST
 --------------------------------------------------------- */
 async function runTest() {
     if (startBtn.classList.contains("disabled")) return;
@@ -359,7 +361,6 @@ async function runTest() {
     statusText.textContent = "Preparing test…";
 
     try {
-        /* IP + ISP */
         const ipInfo = await fetchIPInfo();
         lastResults.ip = ipInfo.ip;
         lastResults.city = ipInfo.city;
@@ -371,7 +372,6 @@ async function runTest() {
 
         ispPill.textContent = ipInfo.isp || "Unknown ISP";
 
-        /* PING + JITTER */
         statusText.textContent = "Measuring ping…";
         const { ping, jitter } = await measurePingAndJitter();
         lastResults.ping = ping;
@@ -382,7 +382,6 @@ async function runTest() {
         pingResultEl.textContent = ping.toFixed(1);
         jitterResultEl.textContent = jitter.toFixed(1);
 
-        /* DOWNLOAD */
         statusText.textContent = "Measuring download…";
         const down = await measureDownload();
         lastResults.download = down;
@@ -390,25 +389,20 @@ async function runTest() {
         animateSpeed(down, "Download");
         updateGauge(down);
 
-        /* UPLOAD */
         statusText.textContent = "Measuring upload…";
         const up = await measureUpload();
         lastResults.upload = up;
         upResultEl.textContent = up.toFixed(2);
 
-        /* ISP GUESS */
         const ispGuess = guessISP(ipInfo, down, up, ping);
         lastResults.isp = ispGuess;
         ispPill.textContent = ispGuess;
 
-        /* PROS / CONS */
         const { pros, cons } = analyzeNetwork(down, up, ping, jitter);
         renderProsCons(pros, cons);
 
-        /* SHOW RESULTS */
         resultsPanel.classList.add("visible");
         statusText.textContent = "Done.";
-
     } catch (e) {
         console.error(e);
         errorText.textContent = "Test failed. Your network or browser may block speed test traffic.";
