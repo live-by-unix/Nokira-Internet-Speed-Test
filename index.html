@@ -7,17 +7,13 @@
   <style>
     :root {
       --bg-dark: #050616;
-      --bg-dark-elevated: #141629;
       --bg-light: #f5f5f9;
-      --bg-light-elevated: #ffffff;
       --text-dark: #ffffff;
       --text-light: #111827;
       --accent1: #00eaff;
       --accent2: #7b2ff7;
       --accent3: #ff9f43;
       --danger: #f97373;
-      --muted-dark: #9ca3c7;
-      --muted-light: #6b7280;
       --radius-card: 22px;
       --transition-fast: 0.18s ease;
       --transition-med: 0.3s ease;
@@ -299,8 +295,8 @@
       stroke-width: 18;
       stroke-linecap: round;
       stroke: url(#gaugeGradient);
-      stroke-dasharray: 565;
-      stroke-dashoffset: 565;
+      stroke-dasharray: 503;
+      stroke-dashoffset: 503;
       filter: drop-shadow(0 0 12px rgba(0, 234, 255, 0.7));
       transition: stroke-dashoffset 0.4s ease-out;
     }
@@ -687,12 +683,12 @@
           <div class="stat-value">
             <span id="jitterValue">--</span><span class="stat-unit">ms</span>
           </div>
-          <div class="stat-sub">Latency variation</</div>
+          <div class="stat-sub">Latency variation</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Server</div>
           <div class="stat-value">
-            <span id="serverValue">Auto</span>
+            <span id="serverValue">Cloudflare</span>
           </div>
           <div class="stat-sub" id="locationValue">Detecting location…</div>
         </div>
@@ -709,15 +705,8 @@
                   <stop offset="100%" stop-color="#ff9f43" />
                 </linearGradient>
               </defs>
-              <path
-                class="gauge-bg"
-                d="M20,100 A80,80 0 1,1 180,100"
-              />
-              <path
-                id="gaugeArc"
-                class="gauge-arc"
-                d="M20,100 A80,80 0 1,1 180,100"
-              />
+              <circle class="gauge-bg" cx="100" cy="100" r="80" />
+              <circle id="gaugeArc" class="gauge-arc" cx="100" cy="100" r="80" />
             </svg>
             <div class="gauge-center">
               <div class="speed-value" id="speedValue">0.00</div>
@@ -829,7 +818,12 @@
     const emailBtn = document.getElementById("emailBtn");
 
     const GAUGE_MAX_MBPS = 500;
-    const GAUGE_LENGTH = 565;
+    const GAUGE_LENGTH = 503; // 2πr for r=80 ≈ 502.65
+
+    const CLOUDFLARE_PING_URL = "https://speed.cloudflare.com/__down?bytes=1";
+    const CLOUDFLARE_DOWNLOAD_URL = "https://speed.cloudflare.com/__down?bytes=20000000";
+    const CLOUDFLARE_UPLOAD_URL = "https://speed.cloudflare.com/__up";
+    const IP_INFO_URL = "https://ipapi.co/json/"; // no token
 
     let lastSpeedDisplay = 0;
     let currentTheme = "dark";
@@ -888,12 +882,11 @@
     }
 
     async function measurePingAndJitter(iterations = 8) {
-      const url = "https://www.cloudflare.com/cdn-cgi/trace";
       const times = [];
       for (let i = 0; i < iterations; i++) {
         const start = performance.now();
         try {
-          await fetch(url, { cache: "no-store", mode: "no-cors" });
+          await fetch(CLOUDFLARE_PING_URL, { cache: "no-store" });
           const end = performance.now();
           times.push(end - start);
         } catch (e) {
@@ -914,14 +907,13 @@
     }
 
     async function measureDownload() {
-      const url = "https://speed.hetzner.de/10MB.bin";
       const startTime = performance.now();
       let bytes = 0;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
+      const timeout = setTimeout(() => controller.abort(), 20000);
 
       try {
-        const response = await fetch(url, {
+        const response = await fetch(CLOUDFLARE_DOWNLOAD_URL, {
           cache: "no-store",
           signal: controller.signal,
         });
@@ -931,7 +923,7 @@
           if (done) break;
           bytes += value.length;
           const elapsed = (performance.now() - startTime) / 1000;
-          if (elapsed > 1) {
+          if (elapsed > 0.5) {
             const mbps = (bytes * 8) / elapsed / 1_000_000;
             animateSpeed(mbps, "Measuring download…");
             updateGauge(mbps);
@@ -948,16 +940,15 @@
     }
 
     async function measureUpload() {
-      const url = "https://httpbin.org/post";
-      const sizeBytes = 2_000_000;
+      const sizeBytes = 4_000_000;
       const payload = new Uint8Array(sizeBytes);
       crypto.getRandomValues(payload);
       const startTime = performance.now();
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
+      const timeout = setTimeout(() => controller.abort(), 20000);
 
       try {
-        await fetch(url, {
+        await fetch(CLOUDFLARE_UPLOAD_URL, {
           method: "POST",
           body: payload,
           signal: controller.signal,
@@ -974,7 +965,7 @@
 
     async function fetchIPInfo() {
       try {
-        const res = await fetch("https://ipapi.co/json/");
+        const res = await fetch(IP_INFO_URL, { cache: "no-store" });
         if (!res.ok) throw new Error("IP API error");
         const data = await res.json();
         return {
@@ -1171,7 +1162,7 @@
 
         const locParts = [ipInfo.city, ipInfo.region, ipInfo.country].filter(Boolean);
         locationValueEl.textContent = locParts.length ? locParts.join(", ") : "Location unavailable";
-        serverValueEl.textContent = "Auto (" + (ipInfo.country || "Global") + ")";
+        serverValueEl.textContent = "Cloudflare" + (ipInfo.country ? " (" + ipInfo.country + ")" : "");
 
         ispPill.textContent = ipInfo.isp || "Unknown ISP";
 
@@ -1190,12 +1181,14 @@
         lastResults.download = down;
         downResultEl.textContent = down.toFixed(2);
         animateSpeed(down, "Download");
+        updateGauge(down);
 
         setStatus("Measuring upload speed…");
         const up = await measureUpload();
         lastResults.upload = up;
         upResultEl.textContent = up.toFixed(2);
         animateSpeed(down, "Download (peak)");
+        updateGauge(down);
 
         const ispGuess = guessISP(ipInfo, down, up, ping);
         lastResults.isp = ispGuess;
@@ -1208,7 +1201,7 @@
         setStatus("Done. Scroll your analysis, then copy or email your results.");
       } catch (e) {
         console.error(e);
-        setError("Something went wrong during the test. Try again, or check if your browser blocks cross‑site requests.");
+        setError("Something went wrong during the test. Try again. Some networks or browsers may block speed test traffic.");
         setStatus("Test failed.");
       } finally {
         startBtn.classList.remove("disabled");
