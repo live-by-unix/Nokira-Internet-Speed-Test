@@ -15,3 +15,8 @@ Nokira provides many more results, as well as email button (opens defualt email 
 
 ## Licensing
 Under MIT license. 
+
+## Why are some numbers so different?
+Because Nokira simulates what your apps should feel, while others use lab/theoretical speeds.   
+So if you want what your apps and website should feel, use Nokira.    
+However if you want the theoretical speeds that basically your apps/websites would never feel, use others. And I am 100% supportive of that. 
