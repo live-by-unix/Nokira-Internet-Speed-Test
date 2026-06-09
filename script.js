@@ -91,7 +91,7 @@ async function measurePingAndJitter(iter = 20) {
   for (let i = 0; i < iter; i++) {
     const start = performance.now();
     try {
-      await fetch(CF_PING, { cache: "no-store", mode: "cors" });
+      await fetch(CF_PING, { cache: "no-store", mode: "no-cors" });
       times.push(performance.now() - start);
     } catch {
       times.push(250);
@@ -111,7 +111,7 @@ async function measurePingAndJitter(iter = 20) {
 
 async function measureDownload() {
   const targetSeconds = 8;
-  const numStreams = 4;
+  const numStreams = 6;
   let totalBytesDownloaded = 0;
   const start = performance.now();
   const controller = new AbortController();
@@ -161,7 +161,7 @@ async function measureUpload() {
   const targetSeconds = 8;
   const chunkSize = 2_000_000;
   const payload = new Uint8Array(chunkSize);
-  const maxConcurrentUploads = 3;
+  const maxConcurrentUploads = 4;
 
   let totalBytesUploaded = 0;
   const start = performance.now();
