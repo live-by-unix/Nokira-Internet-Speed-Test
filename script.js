@@ -1,4 +1,3 @@
-/* ELEMENTS */
 const themeSwitch = document.getElementById("themeSwitch");
 const startBtn = document.getElementById("startBtn");
 const statusText = document.getElementById("statusText");
@@ -27,7 +26,6 @@ const consListEl = document.getElementById("consList");
 const copyBtn = document.getElementById("copyBtn");
 const emailBtn = document.getElementById("emailBtn");
 
-/* CONSTANTS */
 const GAUGE_MAX_MBPS = 500;
 const GAUGE_LENGTH = 503;
 
@@ -36,7 +34,6 @@ const CF_DOWN = "https://speed.cloudflare.com/__down?bytes=";
 const CF_UP = "https://nokira-api.live-by-unix.workers.dev/";
 const IP_INFO = "https://ipapi.co/json/";
 
-/* STATE */
 let lastSpeedDisplay = 0;
 let lastResults = {
   download: null,
@@ -50,9 +47,6 @@ let lastResults = {
   country: null,
 };
 
-/* ---------------------------------------------------------
-   THEME
---------------------------------------------------------- */
 function initTheme() {
   const saved = localStorage.getItem("nokira-theme");
   const theme = saved === "light" ? "light" : "dark";
@@ -66,13 +60,10 @@ themeSwitch.addEventListener("change", () => {
   localStorage.setItem("nokira-theme", theme);
 });
 
-/* ---------------------------------------------------------
-   GAUGE
---------------------------------------------------------- */
 function animateSpeed(target, label) {
   const start = lastSpeedDisplay;
   const end = target;
-  const duration = 500;
+  const duration = 200;
   const startTime = performance.now();
 
   function step(now) {
@@ -94,127 +85,135 @@ function updateGauge(mbps) {
   gaugeArc.style.strokeDashoffset = (GAUGE_LENGTH - GAUGE_LENGTH * ratio).toString();
 }
 
-/* ---------------------------------------------------------
-   PING + JITTER (time-based, trimmed)
---------------------------------------------------------- */
-async function measurePingAndJitter(iter = 30) {
+async function measurePingAndJitter(iter = 20) {
   const times = [];
 
   for (let i = 0; i < iter; i++) {
     const start = performance.now();
     try {
-      await fetch(CF_PING, { cache: "no-store" });
+      await fetch(CF_PING, { cache: "no-store", mode: "cors" });
       times.push(performance.now() - start);
     } catch {
       times.push(250);
     }
-    await new Promise((r) => setTimeout(r, 30));
+    await new Promise((r) => setTimeout(r, 15));
   }
 
   times.sort((a, b) => a - b);
   const cut = Math.floor(times.length * 0.1);
   const trimmed = times.slice(cut, times.length - cut);
 
-  const avg =
-    trimmed.reduce((a, b) => a + b, 0) / Math.max(trimmed.length, 1);
-
-  const jitter = Math.sqrt(
-    trimmed
-      .map((t) => Math.pow(t - avg, 2))
-      .reduce((a, b) => a + b, 0) / Math.max(trimmed.length, 1)
-  );
+  const avg = trimmed.reduce((a, b) => a + b, 0) / Math.max(trimmed.length, 1);
+  const jitter = trimmed.reduce((acc, t) => acc + Math.abs(t - avg), 0) / Math.max(trimmed.length, 1);
 
   return { ping: avg, jitter };
 }
 
-/* ---------------------------------------------------------
-   DOWNLOAD (time-based, realistic)
---------------------------------------------------------- */
 async function measureDownload() {
-  const targetSeconds = 8;          // minimum duration
-  const maxBytes = 120_000_000;     // safety cap
-  let bytes = 0;
-
-  const controller = new AbortController();
+  const targetSeconds = 8;
+  const numStreams = 4;
+  let totalBytesDownloaded = 0;
   const start = performance.now();
+  const controller = new AbortController();
 
-  try {
-    const response = await fetch(CF_DOWN + maxBytes, {
-      cache: "no-store",
-      signal: controller.signal,
-    });
+  const downloadStream = async () => {
+    const chunkUrl = CF_DOWN + "50000000";
+    try {
+      const response = await fetch(chunkUrl, {
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      const reader = response.body.getReader();
 
-    const reader = response.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        totalBytesDownloaded += value.length;
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      bytes += value.length;
-      const elapsed = (performance.now() - start) / 1000;
-
-      if (elapsed >= targetSeconds) {
-        controller.abort();
-        break;
+        const elapsed = (performance.now() - start) / 1000;
+        if (elapsed >= targetSeconds) {
+          controller.abort();
+          break;
+        }
       }
-
-      if (elapsed > 0.5) {
-        const mbps = (bytes * 8) / elapsed / 1_000_000;
-        animateSpeed(mbps, "Download…");
-        updateGauge(mbps);
-      }
+    } catch (e) {
+      if (e.name !== "AbortError") console.warn(e);
     }
-  } catch (e) {
-    if (e.name !== "AbortError") throw e;
-  }
+  };
+
+  const uiInterval = setInterval(() => {
+    const elapsed = (performance.now() - start) / 1000;
+    if (elapsed > 0.5) {
+      const mbps = (totalBytesDownloaded * 8) / elapsed / 1_000_000;
+      animateSpeed(mbps, "Download…");
+      updateGauge(mbps);
+    }
+  }, 150);
+
+  await Promise.all(Array.from({ length: numStreams }, downloadStream));
+  clearInterval(uiInterval);
 
   const totalSeconds = (performance.now() - start) / 1000;
-  return (bytes * 8) / totalSeconds / 1_000_000;
+  return (totalBytesDownloaded * 8) / totalSeconds / 1_000_000;
 }
 
-/* ---------------------------------------------------------
-   UPLOAD (time-based, repeated posts)
---------------------------------------------------------- */
 async function measureUpload() {
-  const targetSeconds = 8;          // minimum duration
-  const chunkSize = 1_000_000;      // 1 MB per POST
-  const payload = new Uint8Array(chunkSize); // zero-filled
+  const targetSeconds = 8;
+  const chunkSize = 2_000_000;
+  const payload = new Uint8Array(chunkSize);
+  const maxConcurrentUploads = 3;
 
-  let bytes = 0;
+  let totalBytesUploaded = 0;
   const start = performance.now();
+  let activeWorkers = 0;
 
-  while (true) {
-    const now = performance.now();
-    const elapsed = (now - start) / 1000;
-    if (elapsed >= targetSeconds) break;
+  const uploadWorker = async () => {
+    if ((performance.now() - start) / 1000 >= targetSeconds) return;
+    activeWorkers++;
 
-    const runStart = performance.now();
+    try {
+      await fetch(CF_UP, {
+        method: "POST",
+        body: payload,
+        mode: "cors"
+      });
+      totalBytesUploaded += chunkSize;
+    } catch (e) {
+      console.warn(e);
+    }
 
-    await fetch(CF_UP, {
-      method: "POST",
-      body: payload,
-    });
+    activeWorkers--;
+    if ((performance.now() - start) / 1000 < targetSeconds) {
+      await uploadWorker();
+    }
+  };
 
-    const runSeconds = (performance.now() - runStart) / 1000;
-    if (runSeconds === 0) continue;
-
-    bytes += chunkSize;
-
-    const totalElapsed = (performance.now() - start) / 1000;
-    if (totalElapsed > 0.5) {
-      const mbps = (bytes * 8) / totalElapsed / 1_000_000;
+  const uiInterval = setInterval(() => {
+    const elapsed = (performance.now() - start) / 1000;
+    if (elapsed > 0.5) {
+      const mbps = (totalBytesUploaded * 8) / elapsed / 1_000_000;
       animateSpeed(mbps, "Upload…");
       updateGauge(mbps);
     }
+  }, 150);
+
+  const workers = [];
+  for (let i = 0; i < maxConcurrentUploads; i++) {
+    workers.push(uploadWorker());
   }
+  
+  await Promise.all(workers);
+  
+  while(activeWorkers > 0) {
+     await new Promise(r => setTimeout(r, 50));
+  }
+  
+  clearInterval(uiInterval);
 
   const totalSeconds = (performance.now() - start) / 1000;
-  return (bytes * 8) / totalSeconds / 1_000_000;
+  return (totalBytesUploaded * 8) / totalSeconds / 1_000_000;
 }
 
-/* ---------------------------------------------------------
-   IP + ISP
---------------------------------------------------------- */
 async function fetchIPInfo() {
   try {
     const res = await fetch(IP_INFO, { cache: "no-store" });
@@ -238,9 +237,6 @@ async function fetchIPInfo() {
   }
 }
 
-/* ---------------------------------------------------------
-   ISP GUESS
---------------------------------------------------------- */
 function guessISP(info, down, up, ping) {
   const isp = (info.isp || "").toLowerCase();
   const symmetric = Math.abs(down - up) / Math.max(down, 1) < 0.25;
@@ -263,9 +259,6 @@ function guessISP(info, down, up, ping) {
   return info.isp;
 }
 
-/* ---------------------------------------------------------
-   PROS / CONS
---------------------------------------------------------- */
 function analyzeNetwork(down, up, ping, jitter) {
   const pros = [];
   const cons = [];
@@ -312,9 +305,6 @@ function renderProsCons(pros, cons) {
   });
 }
 
-/* ---------------------------------------------------------
-   SHARE
---------------------------------------------------------- */
 function generateShareText() {
   const r = lastResults;
 
@@ -330,9 +320,9 @@ function generateShareText() {
       : "") +
     `Download: ${r.download?.toFixed(2) ?? "--"} Mbps\n` +
     `Upload:   ${r.upload?.toFixed(2) ?? "--"} Mbps\n` +
-    `Ping:     ${r.ping?.toFixed(1) ?? "--"} ms\n` +
+    `Ping:      ${r.ping?.toFixed(1) ?? "--"} ms\n` +
     `Jitter:   ${r.jitter?.toFixed(1) ?? "--"} ms\n` +
-    `ISP:      ${r.isp}\n\n` +
+    `ISP:       ${r.isp}\n\n` +
     "Pros:\n" +
     prosItems.map((p) => "- " + p).join("\n") +
     "\n\nCons:\n" +
@@ -356,15 +346,11 @@ emailBtn.addEventListener("click", () => {
   window.location.href = `mailto:?subject=${subject}&body=${body}`;
 });
 
-/* ---------------------------------------------------------
-   MAIN TEST
---------------------------------------------------------- */
 async function runTest() {
   if (startBtn.classList.contains("disabled")) return;
 
   startBtn.classList.add("disabled");
   errorText.textContent = "";
-  resultsPanel.classList.remove("visible");
 
   animateSpeed(0, "Preparing…");
   updateGauge(0);
@@ -403,6 +389,8 @@ async function runTest() {
     const up = await measureUpload();
     lastResults.upload = up;
     upResultEl.textContent = up.toFixed(2);
+    animateSpeed(up, "Upload");
+    updateGauge(up);
 
     const ispGuess = guessISP(ipInfo, down, up, ping);
     lastResults.isp = ispGuess;
@@ -411,7 +399,6 @@ async function runTest() {
     const { pros, cons } = analyzeNetwork(down, up, ping, jitter);
     renderProsCons(pros, cons);
 
-    resultsPanel.classList.add("visible");
     statusText.textContent = "Done.";
   } catch (e) {
     console.error(e);
@@ -422,9 +409,6 @@ async function runTest() {
   startBtn.classList.remove("disabled");
 }
 
-/* ---------------------------------------------------------
-   INIT
---------------------------------------------------------- */
 startBtn.addEventListener("click", runTest);
 initTheme();
 statusText.textContent = "Ready when you are.";
