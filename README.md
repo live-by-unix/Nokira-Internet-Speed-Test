@@ -10,8 +10,8 @@ Link to the actual website is [here](https://nokira.pages.dev/): https://nokira.
 Link to the worker I used is [here](https://nokira-api.live-by-unix.workers.dev/): https://nokira-api.live-by-unix.workers.dev/    (Old version used workers, new version hasn't used worker yet)
 
 ## Why Nokira   
-Most "internet speed tests", most famously Google's/Measurement Lab's Internet Speed Test, my thing using litreal post requests to a cloudflare worker to simulate actual speed. Unlike other's which do a lab simulation of your internet. 
-Nokira provides many more results, as well as email button (opens defualt email client) and copy results button, along with guessing internet provider from results (no actual server), which was a little fun feature I added.    
+Most "internet speed tests", most famously Google's/Measurement Lab's Internet Speed Test use lab based results., my thing using litreal post requests to a Cloudflare worker to simulate actual speed. Unlike others which do a lab simulation of your internet. 
+Nokira provides many more results, as well as email button (opens default email client) and copy results button, along with guessing internet provider from results (no actual server), which was a little fun feature I added.    
 
 ## Licensing
 Under MIT license. 
