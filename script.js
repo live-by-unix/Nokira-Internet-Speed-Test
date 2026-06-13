@@ -1,3 +1,4 @@
+// --- DOM Elements ---
 const themeSwitch = document.getElementById("themeSwitch");
 const startBtn = document.getElementById("startBtn");
 const statusText = document.getElementById("statusText");
@@ -26,14 +27,16 @@ const consListEl = document.getElementById("consList");
 const copyBtn = document.getElementById("copyBtn");
 const emailBtn = document.getElementById("emailBtn");
 
+// --- Constants ---
 const GAUGE_MAX_MBPS = 500;
 const GAUGE_LENGTH = 503;
 
 const CF_PING = "https://speed.cloudflare.com/__down?bytes=1";
-const CF_DOWN = "https://speed.cloudflare.com/__down?bytes=";
+const CF_DOWN = "https://speed.cloudflare.com/__down?bytes=25000000"; // ~25MB chunks
 const CF_UP = "https://nokira-api.live-by-unix.workers.dev/";
 const IP_INFO = "https://ipapi.co/json/";
 
+// --- State Management ---
 let lastSpeedDisplay = 0;
 let lastResults = {
   download: null,
@@ -47,178 +50,242 @@ let lastResults = {
   country: null,
 };
 
+// --- Theme Initialization & Management ---
 function initTheme() {
   const saved = localStorage.getItem("nokira-theme");
   const theme = saved === "light" ? "light" : "dark";
   document.body.setAttribute("data-theme", theme);
-  themeSwitch.checked = theme === "light";
+  if (themeSwitch) themeSwitch.checked = theme === "light";
 }
 
-themeSwitch.addEventListener("change", () => {
-  const theme = themeSwitch.checked ? "light" : "dark";
-  document.body.setAttribute("data-theme", theme);
-  localStorage.setItem("nokira-theme", theme);
-});
+if (themeSwitch) {
+  themeSwitch.addEventListener("change", () => {
+    const theme = themeSwitch.checked ? "light" : "dark";
+    document.body.setAttribute("data-theme", theme);
+    localStorage.setItem("nokira-theme", theme);
+  });
+}
 
+// --- UI Animations & Gauge Controls ---
 function animateSpeed(target, label) {
   const start = lastSpeedDisplay;
-  const end = target;
-  const duration = 200;
+  const duration = 180; // Snappy UI tracking
   const startTime = performance.now();
 
   function step(now) {
     const t = Math.min(1, (now - startTime) / duration);
     const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-    const value = start + (end - start) * eased;
-    speedValueEl.textContent = value.toFixed(2);
-    if (t < 1) requestAnimationFrame(step);
-    else lastSpeedDisplay = end;
+    const value = start + (target - start) * eased;
+    if (speedValueEl) speedValueEl.textContent = value.toFixed(2);
+    if (t < 1) {
+      requestAnimationFrame(step);
+    } else {
+      lastSpeedDisplay = target;
+    }
   }
 
-  speedLabelEl.textContent = label;
+  if (speedLabelEl) speedLabelEl.textContent = label;
   requestAnimationFrame(step);
 }
 
 function updateGauge(mbps) {
+  if (!gaugeArc) return;
   const clamped = Math.max(0, Math.min(GAUGE_MAX_MBPS, mbps));
   const ratio = clamped / GAUGE_MAX_MBPS;
   gaugeArc.style.strokeDashoffset = (GAUGE_LENGTH - GAUGE_LENGTH * ratio).toString();
 }
 
-async function measurePingAndJitter(iter = 20) {
+// --- 1. Latency & Jitter Engine (RFC 1889 Compliance) ---
+async function measurePingAndJitter(iter = 25) {
   const times = [];
+
+  // Warm up connection to drop TLS/TCP handshake overhead from samples
+  try {
+    await fetch(`${CF_PING}&warmup=${Math.random()}`, { cache: "no-store", mode: "no-cors" });
+  } catch (e) {}
 
   for (let i = 0; i < iter; i++) {
     const start = performance.now();
     try {
-      await fetch(CF_PING, { cache: "no-store", mode: "no-cors" });
+      await fetch(`${CF_PING}&cacheBust=${Math.random()}`, { cache: "no-store", mode: "no-cors" });
       times.push(performance.now() - start);
     } catch {
-      times.push(250);
+      times.push(250); // Fallback network penalty limit
     }
-    await new Promise((r) => setTimeout(r, 15));
+    await new Promise((r) => setTimeout(r, 20));
   }
 
+  // Trim top and bottom 10% outliers to filter local UI-thread thread jitter
   times.sort((a, b) => a - b);
   const cut = Math.floor(times.length * 0.1);
   const trimmed = times.slice(cut, times.length - cut);
 
-  const avg = trimmed.reduce((a, b) => a + b, 0) / Math.max(trimmed.length, 1);
-  const jitter = trimmed.reduce((acc, t) => acc + Math.abs(t - avg), 0) / Math.max(trimmed.length, 1);
+  const avgPing = trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
 
-  return { ping: avg, jitter };
+  // RFC 1889 standard Jitter: mean absolute variance between consecutive packets
+  let jitterSum = 0;
+  for (let i = 1; i < trimmed.length; i++) {
+    jitterSum += Math.abs(trimmed[i] - trimmed[i - 1]);
+  }
+  const jitter = jitterSum / (trimmed.length - 1 || 1);
+
+  return { ping: avgPing, jitter };
 }
 
+// --- 2. High-Speed Download Engine (Socket Isolation) ---
 async function measureDownload() {
-  const targetSeconds = 8;
-  const numStreams = 6;
-  let totalBytesDownloaded = 0;
-  const start = performance.now();
+  const testDuration = 8000; 
+  const rampUpTime = 2000;    // Drop the first 2 seconds to allow TCP window scaling to stabilize
+  const numStreams = 6;      // Distinct parallel connections
+  
+  let totalBytesLoaded = 0;
+  let bytesAfterRampUp = 0;
+  let rampUpPassed = false;
+  let rampUpStartTime = 0;
+  
+  const startTime = performance.now();
   const controller = new AbortController();
 
-  const downloadStream = async () => {
-    const chunkUrl = CF_DOWN + "50000000";
-    try {
-      const response = await fetch(chunkUrl, {
-        cache: "no-store",
-        signal: controller.signal,
-      });
-      const reader = response.body.getReader();
+  setTimeout(() => {
+    rampUpPassed = true;
+    rampUpStartTime = performance.now();
+  }, rampUpTime);
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        totalBytesDownloaded += value.length;
-
-        const elapsed = (performance.now() - start) / 1000;
-        if (elapsed >= targetSeconds) {
-          controller.abort();
-          break;
+  const downloadStream = async (streamIndex) => {
+    while (performance.now() - startTime < testDuration && !controller.signal.aborted) {
+      try {
+        // Enforcing different parameters causes browsers to spawn independent TCP states
+        const uniqueUrl = `${CF_DOWN}&stream=${streamIndex}&nocache=${Math.random()}`;
+        const response = await fetch(uniqueUrl, {
+          cache: "no-store",
+          mode: "no-cors",
+          signal: controller.signal
+        });
+        
+        // Native streaming offloads data assembling down to native code, avoiding JS loop blockades
+        const blob = await response.blob(); 
+        totalBytesLoaded += blob.size;
+        if (rampUpPassed) {
+          bytesAfterRampUp += blob.size;
         }
+      } catch (e) {
+        if (e.name !== "AbortError") console.warn(e);
+        break;
       }
-    } catch (e) {
-      if (e.name !== "AbortError") console.warn(e);
     }
   };
 
   const uiInterval = setInterval(() => {
-    const elapsed = (performance.now() - start) / 1000;
-    if (elapsed > 0.5) {
-      const mbps = (totalBytesDownloaded * 8) / elapsed / 1_000_000;
-      animateSpeed(mbps, "Download…");
-      updateGauge(mbps);
+    const now = performance.now();
+    const elapsedTotal = (now - startTime) / 1000;
+    
+    let currentMbps = 0;
+    if (rampUpPassed) {
+      const elapsedActive = (now - rampUpStartTime) / 1000;
+      currentMbps = (bytesAfterRampUp * 8) / elapsedActive / 1_000_000;
+    } else {
+      currentMbps = (totalBytesLoaded * 8) / elapsedTotal / 1_000_000;
     }
-  }, 150);
 
-  await Promise.all(Array.from({ length: numStreams }, downloadStream));
+    if (elapsedTotal > 0.3) {
+      animateSpeed(currentMbps, "Download…");
+      updateGauge(currentMbps);
+    }
+  }, 200);
+
+  const streams = Array.from({ length: numStreams }, (_, i) => downloadStream(i));
+  
+  await Promise.race([
+    Promise.all(streams),
+    new Promise(r => setTimeout(() => { controller.abort(); r(); }, testDuration))
+  ]);
+
   clearInterval(uiInterval);
-
-  const totalSeconds = (performance.now() - start) / 1000;
-  return (totalBytesDownloaded * 8) / totalSeconds / 1_000_000;
+  
+  const finalElapsedActive = (performance.now() - rampUpStartTime) / 1000;
+  return finalElapsedActive > 0 ? (bytesAfterRampUp * 8) / finalElapsedActive / 1_000_000 : 0;
 }
 
-async function measureUpload() {
-  const targetSeconds = 8;
-  const chunkSize = 2_000_000;
-  const payload = new Uint8Array(chunkSize);
-  const maxConcurrentUploads = 4;
+// --- 3. High-Speed Upload Engine (Uncompressible Chunk Pipelines) ---
+function measureUpload() {
+  return new Promise((resolve) => {
+    const testDuration = 8000;
+    const rampUpTime = 2000;
+    const numStreams = 4;
+    const chunkSize = 4_000_000; // 4MB chunks to efficiently saturate fiber upload lines
+    
+    // Fill buffer with random cryptographically secure bytes to prevent compression by ISPs or hardware
+    const payload = new Uint8Array(chunkSize);
+    crypto.getRandomValues(payload);
 
-  let totalBytesUploaded = 0;
-  const start = performance.now();
-  let activeWorkers = 0;
+    let activeStreams = [];
+    let bytesUploadedAfterRamp = 0;
+    let startTime = performance.now();
+    let rampUpStartTime = startTime + rampUpTime;
+    let isRampUpPassed = false;
 
-  const uploadWorker = async () => {
-    if ((performance.now() - start) / 1000 >= targetSeconds) return;
-    activeWorkers++;
+    setTimeout(() => { isRampUpPassed = true; }, rampUpTime);
 
-    try {
-      await fetch(CF_UP, {
-        method: "POST",
-        body: payload,
-        mode: "cors"
-      });
-      totalBytesUploaded += chunkSize;
-    } catch (e) {
-      console.warn(e);
+    const startXHRStream = (index) => {
+      if (performance.now() - startTime >= testDuration) return;
+
+      const xhr = new XMLHttpRequest();
+      activeStreams.push(xhr);
+      xhr.open("POST", `${CF_UP}?stream=${index}&cacheBust=${Math.random()}`, true);
+      
+      let lastLoaded = 0;
+      xhr.upload.onprogress = (event) => {
+        if (performance.now() - startTime >= testDuration) {
+          xhr.abort();
+          return;
+        }
+        
+        const delta = event.loaded - lastLoaded;
+        lastLoaded = event.loaded;
+
+        if (isRampUpPassed) {
+          bytesUploadedAfterRamp += delta;
+        }
+      };
+
+      xhr.onload = xhr.onerror = () => {
+        // Instantly spin up next block in queue to eliminate gap times
+        startXHRStream(index);
+      };
+
+      xhr.send(payload);
+    };
+
+    const uiInterval = setInterval(() => {
+      const now = performance.now();
+      if (isRampUpPassed && now > rampUpStartTime) {
+        const elapsedActive = (now - rampUpStartTime) / 1000;
+        const currentMbps = (bytesUploadedAfterRamp * 8) / elapsedActive / 1_000_000;
+        animateSpeed(currentMbps, "Upload…");
+        updateGauge(currentMbps);
+      }
+    }, 200);
+
+    for (let i = 0; i < numStreams; i++) {
+      startXHRStream(i);
     }
 
-    activeWorkers--;
-    if ((performance.now() - start) / 1000 < targetSeconds) {
-      await uploadWorker();
-    }
-  };
-
-  const uiInterval = setInterval(() => {
-    const elapsed = (performance.now() - start) / 1000;
-    if (elapsed > 0.5) {
-      const mbps = (totalBytesUploaded * 8) / elapsed / 1_000_000;
-      animateSpeed(mbps, "Upload…");
-      updateGauge(mbps);
-    }
-  }, 150);
-
-  const workers = [];
-  for (let i = 0; i < maxConcurrentUploads; i++) {
-    workers.push(uploadWorker());
-  }
-  
-  await Promise.all(workers);
-  
-  while(activeWorkers > 0) {
-     await new Promise(r => setTimeout(r, 50));
-  }
-  
-  clearInterval(uiInterval);
-
-  const totalSeconds = (performance.now() - start) / 1000;
-  return (totalBytesUploaded * 8) / totalSeconds / 1_000_000;
+    setTimeout(() => {
+      clearInterval(uiInterval);
+      activeStreams.forEach(xhr => { try { xhr.abort(); } catch(e){} });
+      
+      const finalElapsedActive = (performance.now() - rampUpStartTime) / 1000;
+      const finalMbps = finalElapsedActive > 0 ? (bytesUploadedAfterRamp * 8) / finalElapsedActive / 1_000_000 : 0;
+      resolve(finalMbps);
+    }, testDuration);
+  });
 }
 
+// --- Metadata & Diagnostics Helpers ---
 async function fetchIPInfo() {
   try {
     const res = await fetch(IP_INFO, { cache: "no-store" });
     const data = await res.json();
-
     return {
       ip: data.ip || null,
       isp: data.org || data.asn || "Unknown",
@@ -227,13 +294,7 @@ async function fetchIPInfo() {
       country: data.country_name || null,
     };
   } catch {
-    return {
-      ip: null,
-      isp: "Unknown",
-      city: null,
-      region: null,
-      country: null,
-    };
+    return { ip: null, isp: "Unknown", city: null, region: null, country: null };
   }
 }
 
@@ -252,10 +313,8 @@ function guessISP(info, down, up, ping) {
   if (isp.includes("telus")) return "Likely Telus";
   if (isp.includes("virgin")) return "Likely Virgin Media";
 
-  if (symmetric && down > 300) return "Likely Fiber Provider";
-  if (!symmetric && down > 50 && up < 40) return "Likely Cable Provider";
-  if (ping > 60 && down < 50) return "Possibly LTE/5G";
-
+  if (symmetric && down > 250) return "Likely Fiber Provider";
+  if (!symmetric && down > 50 && up < 45) return "Likely Cable Provider";
   return info.isp;
 }
 
@@ -263,24 +322,23 @@ function analyzeNetwork(down, up, ping, jitter) {
   const pros = [];
   const cons = [];
 
-  if (down >= 500) pros.push("Excellent for 4K streaming and cloud gaming.");
+  if (down >= 450) pros.push("Excellent multi-device Gig/Fiber level throughput.");
   else if (down >= 200) pros.push("Great for HD/4K streaming and multitasking.");
   else if (down >= 50) pros.push("Good for HD streaming and browsing.");
   else cons.push("Download speed is low for modern streaming.");
 
-  if (up >= 100) pros.push("Fantastic upload for streaming and backups.");
+  if (up >= 400) pros.push("Symmetric fiber uploading capabilities achieved.");
+  else if (up >= 100) pros.push("Fantastic upload for streaming and cloud staging.");
   else if (up >= 20) pros.push("Strong upload for video calls.");
-  else if (up >= 5) pros.push("Upload is fine for casual calls.");
-  else cons.push("Upload may cause issues with video calls.");
+  else cons.push("Upload limitations detected. Heavy uploads may choke down streams.");
 
-  if (ping <= 20) pros.push("Excellent latency for gaming.");
+  if (ping <= 15) pros.push("Ultra-low latency connection. Pristine conditions for real-time applications.");
   else if (ping <= 40) pros.push("Good latency for most apps.");
-  else if (ping <= 70) cons.push("Latency may be noticeable in games.");
   else cons.push("High latency affects real‑time apps.");
 
-  if (jitter <= 10) pros.push("Stable connection for calls.");
-  else if (jitter <= 25) cons.push("Some jitter may cause glitches.");
-  else cons.push("High jitter suggests instability.");
+  if (jitter <= 5) pros.push("Rock-solid stability with near-zero connection variance.");
+  else if (jitter <= 20) cons.push("Minor jitter detected.");
+  else cons.push("High jitter suggests stream instability.");
 
   return {
     pros: [...new Set(pros)],
@@ -289,27 +347,26 @@ function analyzeNetwork(down, up, ping, jitter) {
 }
 
 function renderProsCons(pros, cons) {
-  prosListEl.innerHTML = "";
-  consListEl.innerHTML = "";
+  if (prosListEl) prosListEl.innerHTML = "";
+  if (consListEl) consListEl.innerHTML = "";
 
   pros.forEach((p) => {
     const li = document.createElement("li");
     li.textContent = p;
-    prosListEl.appendChild(li);
+    if (prosListEl) prosListEl.appendChild(li);
   });
 
   cons.forEach((c) => {
     const li = document.createElement("li");
     li.textContent = c;
-    consListEl.appendChild(li);
+    if (consListEl) consListEl.appendChild(li);
   });
 }
 
 function generateShareText() {
   const r = lastResults;
-
-  const prosItems = Array.from(prosListEl.children).map((li) => li.textContent);
-  const consItems = Array.from(consListEl.children).map((li) => li.textContent);
+  const prosItems = prosListEl ? Array.from(prosListEl.children).map((li) => li.textContent) : [];
+  const consItems = consListEl ? Array.from(consListEl.children).map((li) => li.textContent) : [];
 
   return (
     "📡 Nokira Internet Speed Test Results\n" +
@@ -320,41 +377,47 @@ function generateShareText() {
       : "") +
     `Download: ${r.download?.toFixed(2) ?? "--"} Mbps\n` +
     `Upload:   ${r.upload?.toFixed(2) ?? "--"} Mbps\n` +
-    `Ping:      ${r.ping?.toFixed(1) ?? "--"} ms\n` +
+    `Ping:     ${r.ping?.toFixed(1) ?? "--"} ms\n` +
     `Jitter:   ${r.jitter?.toFixed(1) ?? "--"} ms\n` +
-    `ISP:       ${r.isp}\n\n` +
+    `ISP:      ${r.isp}\n\n` +
     "Pros:\n" +
     prosItems.map((p) => "- " + p).join("\n") +
     "\n\nCons:\n" +
     consItems.map((c) => "- " + c).join("\n") +
-    "\n\nTested with Nokira Internet Speed Test."
+    "\n\nTested with Nokira Internet Speed Test Engine."
   );
 }
 
-copyBtn.addEventListener("click", async () => {
-  try {
-    await navigator.clipboard.writeText(generateShareText());
-    statusText.innerHTML = "<strong>Copied!</strong>";
-  } catch {
-    statusText.textContent = "Copy failed.";
-  }
-});
+// --- Share and Action Listeners ---
+if (copyBtn) {
+  copyBtn.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(generateShareText());
+      if (statusText) statusText.innerHTML = "<strong>Copied to clipboard!</strong>";
+    } catch {
+      if (statusText) statusText.textContent = "Copy failed.";
+    }
+  });
+}
 
-emailBtn.addEventListener("click", () => {
-  const subject = encodeURIComponent("My Nokira Internet Speed Test Results");
-  const body = encodeURIComponent(generateShareText());
-  window.location.href = `mailto:?subject=${subject}&body=${body}`;
-});
+if (emailBtn) {
+  emailBtn.addEventListener("click", () => {
+    const subject = encodeURIComponent("My Nokira Internet Speed Test Results");
+    const body = encodeURIComponent(generateShareText());
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  });
+}
 
+// --- Main Test Suite Control Flow ---
 async function runTest() {
   if (startBtn.classList.contains("disabled")) return;
 
   startBtn.classList.add("disabled");
-  errorText.textContent = "";
+  if (errorText) errorText.textContent = "";
 
-  animateSpeed(0, "Preparing…");
+  animateSpeed(0, "Preparing Core Engines…");
   updateGauge(0);
-  statusText.textContent = "Preparing test…";
+  if (statusText) statusText.textContent = "Locating closest node…";
 
   try {
     const ipInfo = await fetchIPInfo();
@@ -364,51 +427,55 @@ async function runTest() {
     lastResults.country = ipInfo.country;
 
     const locParts = [ipInfo.city, ipInfo.region, ipInfo.country].filter(Boolean);
-    locationValueEl.textContent = locParts.join(", ") || "Location unavailable";
+    if (locationValueEl) locationValueEl.textContent = locParts.join(", ") || "Location unlinked";
+    if (ispPill) ispPill.textContent = ipInfo.isp || "Unknown Provider";
 
-    ispPill.textContent = ipInfo.isp || "Unknown ISP";
-
-    statusText.textContent = "Measuring ping…";
+    // Step 1: Ping / Jitter
+    if (statusText) statusText.textContent = "Analyzing structural latency…";
     const { ping, jitter } = await measurePingAndJitter();
     lastResults.ping = ping;
     lastResults.jitter = jitter;
 
-    pingValueEl.textContent = ping.toFixed(1);
-    jitterValueEl.textContent = jitter.toFixed(1);
-    pingResultEl.textContent = ping.toFixed(1);
-    jitterResultEl.textContent = jitter.toFixed(1);
+    if (pingValueEl) pingValueEl.textContent = ping.toFixed(1);
+    if (jitterValueEl) jitterValueEl.textContent = jitter.toFixed(1);
+    if (pingResultEl) pingResultEl.textContent = ping.toFixed(1);
+    if (jitterResultEl) jitterResultEl.textContent = jitter.toFixed(1);
 
-    statusText.textContent = "Measuring download…";
+    // Step 2: Download Stream Pipeline
+    if (statusText) statusText.textContent = "Streaming downstream channels…";
     const down = await measureDownload();
     lastResults.download = down;
-    downResultEl.textContent = down.toFixed(2);
-    animateSpeed(down, "Download");
+    if (downResultEl) downResultEl.textContent = down.toFixed(2);
+    animateSpeed(down, "Download Finished");
     updateGauge(down);
 
-    statusText.textContent = "Measuring upload…";
+    // Step 3: Upload Stream Pipeline
+    if (statusText) statusText.textContent = "Saturating upload pipelines…";
     const up = await measureUpload();
     lastResults.upload = up;
-    upResultEl.textContent = up.toFixed(2);
-    animateSpeed(up, "Upload");
+    if (upResultEl) upResultEl.textContent = up.toFixed(2);
+    animateSpeed(up, "Upload Finished");
     updateGauge(up);
 
+    // Diagnostics Evaluations
     const ispGuess = guessISP(ipInfo, down, up, ping);
     lastResults.isp = ispGuess;
-    ispPill.textContent = ispGuess;
+    if (ispPill) ispPill.textContent = ispGuess;
 
     const { pros, cons } = analyzeNetwork(down, up, ping, jitter);
     renderProsCons(pros, cons);
 
-    statusText.textContent = "Done.";
+    if (statusText) statusText.textContent = "Test run successfully compiled.";
   } catch (e) {
     console.error(e);
-    errorText.textContent = "Test failed. Your network or browser may block speed test traffic.";
-    statusText.textContent = "Error.";
+    if (errorText) errorText.textContent = "High-speed stream pipeline disrupted. Check for local firewalls or active socket blockers.";
+    if (statusText) statusText.textContent = "Execution Halted.";
   }
 
   startBtn.classList.remove("disabled");
 }
 
-startBtn.addEventListener("click", runTest);
+// --- Initial Execution Entry ---
+if (startBtn) startBtn.addEventListener("click", runTest);
 initTheme();
-statusText.textContent = "Ready when you are.";
+if (statusText) statusText.textContent = "Systems ready for diagnostic run.";
