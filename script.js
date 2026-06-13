@@ -32,8 +32,8 @@ const GAUGE_MAX_MBPS = 500;
 const GAUGE_LENGTH = 503;
 
 const CF_PING = "https://speed.cloudflare.com/__down?bytes=1";
-const CF_DOWN = "https://speed.cloudflare.com/__down?bytes=10000000"; // ~10MB chunks to prevent firewall flagging
-const UPLOAD_TARGET = "https://httpbin.org/put";                      // Permissive, zero-overhead upload track
+const CF_DOWN = "https://speed.cloudflare.com/__down?bytes=10000000"; // ~10MB chunks
+const UPLOAD_TARGET = "https://usa.openspeedtest.com/upload";         // Unthrottled, CORS-open enterprise target
 const IP_INFO = "https://ipapi.co/json/";
 
 // --- State Management ---
@@ -95,7 +95,7 @@ function updateGauge(mbps) {
   gaugeArc.style.strokeDashoffset = (GAUGE_LENGTH - GAUGE_LENGTH * ratio).toString();
 }
 
-// --- 1. Latency & Jitter Engine (RFC 1889 Compliance) ---
+// --- 1. Latency & Jitter Engine ---
 async function measurePingAndJitter(iter = 20) {
   const times = [];
 
@@ -219,13 +219,13 @@ async function measureDownload() {
   return finalElapsedActive > 0 ? (bytesAfterRampUp * 8) / finalElapsedActive / 1_000_000 : 0;
 }
 
-// --- 3. High-Speed Upload Engine (Clean PUT CORS-Permissive Pipeline) ---
+// --- 3. High-Speed Upload Engine (Enterprise Ingestion Track) ---
 function measureUpload() {
   return new Promise((resolve) => {
     const testDuration = 8000;
     const rampUpTime = 2000;
-    const numStreams = 3;        // Balanced stream allocation to avoid browser worker thrashing
-    const chunkSize = 2_500_000; // 2.5MB buffers maximize pipe occupancy without timing out local sockets
+    const numStreams = 4;        // Back up to 4 parallel processing pipelines
+    const chunkSize = 5_000_000; // 5MB chunks to easily saturate high-speed fiber uploading
     
     const payload = new Uint8Array(chunkSize);
     const maxEntropySize = 65536; 
@@ -251,8 +251,8 @@ function measureUpload() {
       const xhr = new XMLHttpRequest();
       activeStreams.push(xhr);
       
-      // Fix: Shifted endpoint to a CORS-permissive pipeline utilizing clean PUT streams
-      xhr.open("PUT", `${UPLOAD_TARGET}?nocache=${Math.random()}`, true);
+      // Using an enterprise-scale speedtest post target with open CORS rules
+      xhr.open("POST", `${UPLOAD_TARGET}?nocache=${Math.random()}`, true);
       
       let lastLoaded = 0;
       xhr.upload.onprogress = (event) => {
