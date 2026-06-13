@@ -33,7 +33,7 @@ const GAUGE_LENGTH = 503;
 
 const CF_PING = "https://speed.cloudflare.com/__down?bytes=1";
 const CF_DOWN = "https://speed.cloudflare.com/__down?bytes=10000000"; // ~10MB chunks to avoid firewall flagging
-const CF_UP = "https://speed.cloudflare.com/__up";                  // Optimized native edge target
+const CF_UP = "https://speed.cloudflare.com/__up";                  // Optimized clean edge target
 const IP_INFO = "https://ipapi.co/json/";
 
 // --- State Management ---
@@ -219,7 +219,7 @@ async function measureDownload() {
   return finalElapsedActive > 0 ? (bytesAfterRampUp * 8) / finalElapsedActive / 1_000_000 : 0;
 }
 
-// --- 3. High-Speed Upload Engine (With Quota Safe Chunk Allocation) ---
+// --- 3. High-Speed Upload Engine (Clean Native Pipeline) ---
 function measureUpload() {
   return new Promise((resolve) => {
     const testDuration = 8000;
@@ -245,14 +245,14 @@ function measureUpload() {
 
     setTimeout(() => { isRampUpPassed = true; }, rampUpTime);
 
-    const startXHRStream = (index) => {
+    const startXHRStream = () => {
       if (performance.now() - startTime >= testDuration) return;
 
       const xhr = new XMLHttpRequest();
       activeStreams.push(xhr);
       
-      // Fixed: Switched from custom worker url to Cloudflare's native upload test node
-      xhr.open("POST", `${CF_UP}?stream=${index}&cacheBust=${Math.random()}`, true);
+      // Fix: Clean POST target without any query string to bypass Cloudflare edge rules
+      xhr.open("POST", CF_UP, true);
       
       let lastLoaded = 0;
       xhr.upload.onprogress = (event) => {
@@ -270,7 +270,8 @@ function measureUpload() {
       };
 
       xhr.onload = xhr.onerror = () => {
-        startXHRStream(index);
+        // Instantly chain the next pipeline block without gap times
+        startXHRStream();
       };
 
       xhr.send(payload);
@@ -286,8 +287,9 @@ function measureUpload() {
       }
     }, 200);
 
+    // Initial pipeline thread spinup
     for (let i = 0; i < numStreams; i++) {
-      startXHRStream(i);
+      startXHRStream();
     }
 
     setTimeout(() => {
@@ -318,7 +320,6 @@ async function fetchIPInfo() {
   }
 }
 
-// Fixed validation threshold to perfectly map symmetric fiber plans
 function guessISP(info, down, up, ping) {
   const isp = (info.isp || "").toLowerCase();
   const symmetric = Math.abs(down - up) / Math.max(down, 1) < 0.25;
