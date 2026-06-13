@@ -32,8 +32,8 @@ const GAUGE_MAX_MBPS = 500;
 const GAUGE_LENGTH = 503;
 
 const CF_PING = "https://speed.cloudflare.com/__down?bytes=1";
-const CF_DOWN = "https://speed.cloudflare.com/__down?bytes=10000000"; // ~10MB chunks to avoid firewall flagging
-const CF_UP = "https://speed.cloudflare.com/__up";                  // Optimized clean edge target
+const CF_DOWN = "https://speed.cloudflare.com/__down?bytes=10000000"; // ~10MB chunks to prevent firewall flagging
+const UPLOAD_TARGET = "https://httpbin.org/put";                      // Permissive, zero-overhead upload track
 const IP_INFO = "https://ipapi.co/json/";
 
 // --- State Management ---
@@ -219,13 +219,13 @@ async function measureDownload() {
   return finalElapsedActive > 0 ? (bytesAfterRampUp * 8) / finalElapsedActive / 1_000_000 : 0;
 }
 
-// --- 3. High-Speed Upload Engine (Clean Native Pipeline) ---
+// --- 3. High-Speed Upload Engine (Clean PUT CORS-Permissive Pipeline) ---
 function measureUpload() {
   return new Promise((resolve) => {
     const testDuration = 8000;
     const rampUpTime = 2000;
-    const numStreams = 4;
-    const chunkSize = 4_000_000; 
+    const numStreams = 3;        // Balanced stream allocation to avoid browser worker thrashing
+    const chunkSize = 2_500_000; // 2.5MB buffers maximize pipe occupancy without timing out local sockets
     
     const payload = new Uint8Array(chunkSize);
     const maxEntropySize = 65536; 
@@ -251,8 +251,8 @@ function measureUpload() {
       const xhr = new XMLHttpRequest();
       activeStreams.push(xhr);
       
-      // Fix: Clean POST target without any query string to bypass Cloudflare edge rules
-      xhr.open("POST", CF_UP, true);
+      // Fix: Shifted endpoint to a CORS-permissive pipeline utilizing clean PUT streams
+      xhr.open("PUT", `${UPLOAD_TARGET}?nocache=${Math.random()}`, true);
       
       let lastLoaded = 0;
       xhr.upload.onprogress = (event) => {
@@ -270,7 +270,6 @@ function measureUpload() {
       };
 
       xhr.onload = xhr.onerror = () => {
-        // Instantly chain the next pipeline block without gap times
         startXHRStream();
       };
 
@@ -287,7 +286,6 @@ function measureUpload() {
       }
     }, 200);
 
-    // Initial pipeline thread spinup
     for (let i = 0; i < numStreams; i++) {
       startXHRStream();
     }
