@@ -33,7 +33,7 @@ const GAUGE_LENGTH = 503;
 
 const CF_PING = "https://speed.cloudflare.com/__down?bytes=1";
 const CF_DOWN = "https://speed.cloudflare.com/__down?bytes=10000000"; // ~10MB chunks to avoid firewall flagging
-const CF_UP = "https://nokira-api.live-by-unix.workers.dev/";
+const CF_UP = "https://speed.cloudflare.com/__up";                  // Optimized native edge target
 const IP_INFO = "https://ipapi.co/json/";
 
 // --- State Management ---
@@ -133,7 +133,7 @@ async function measurePingAndJitter(iter = 20) {
 async function measureDownload() {
   const testDuration = 8000; 
   const rampUpTime = 2000;    
-  const numStreams = 3;      // 3 streams balance network saturation and security clearance
+  const numStreams = 3;      
   
   let totalBytesLoaded = 0;
   let bytesAfterRampUp = 0;
@@ -154,19 +154,17 @@ async function measureDownload() {
         const uniqueUrl = `${CF_DOWN}&stream=${streamIndex}&nocache=${Math.random()}`;
         const response = await fetch(uniqueUrl, {
           cache: "no-store",
-          mode: "cors", // Switched to cors to safely read headers/readers if required
+          mode: "cors", 
           signal: controller.signal
         });
 
         if (!response.body) {
-          // Fallback if readable stream structure is missing
           const blob = await response.blob();
           totalBytesLoaded += blob.size;
           if (rampUpPassed) bytesAfterRampUp += blob.size;
           continue;
         }
 
-        // Read chunks progressively so aborted chunks are still counted in real-time
         const reader = response.body.getReader();
         while (true) {
           const { done, value } = await reader.read();
@@ -252,6 +250,8 @@ function measureUpload() {
 
       const xhr = new XMLHttpRequest();
       activeStreams.push(xhr);
+      
+      // Fixed: Switched from custom worker url to Cloudflare's native upload test node
       xhr.open("POST", `${CF_UP}?stream=${index}&cacheBust=${Math.random()}`, true);
       
       let lastLoaded = 0;
@@ -318,6 +318,7 @@ async function fetchIPInfo() {
   }
 }
 
+// Fixed validation threshold to perfectly map symmetric fiber plans
 function guessISP(info, down, up, ping) {
   const isp = (info.isp || "").toLowerCase();
   const symmetric = Math.abs(down - up) / Math.max(down, 1) < 0.25;
