@@ -33,7 +33,7 @@ const GAUGE_LENGTH = 503;
 
 const CF_PING = "https://speed.cloudflare.com/__down?bytes=1";
 const CF_DOWN = "https://speed.cloudflare.com/__down?bytes=10000000"; // ~10MB chunks
-const UPLOAD_TARGET = "https://httpbin.org/anything";                 // Verified, globally open CORS wildcard endpoint
+const UPLOAD_TARGET = "https://httpbin.org/anything";                 // Wildcard open target
 const IP_INFO = "https://ipapi.co/json/";
 
 // --- State Management ---
@@ -219,14 +219,15 @@ async function measureDownload() {
   return finalElapsedActive > 0 ? (bytesAfterRampUp * 8) / finalElapsedActive / 1_000_000 : 0;
 }
 
-// --- 3. High-Speed Upload Engine (CORS-Compliant Verified Pipeline) ---
+// --- 3. High-Speed Upload Engine (Optimized Native Boundary Track) ---
 function measureUpload() {
   return new Promise((resolve) => {
     const testDuration = 8000;
     const rampUpTime = 2000;
-    const numStreams = 3;        // Multi-stream layout to effectively fill up your fiber line
-    const chunkSize = 2000000;   // ~2MB blocks prevent multi-threaded socket crashes
+    const numStreams = 4;        // Expanded to 4 streams to maximize fiber throughput
+    const chunkSize = 4000000;   // Optimized 4MB block size
     
+    // Generate secure random payload configuration
     const payload = new Uint8Array(chunkSize);
     const maxEntropySize = 65536; 
     const randomSeed = new Uint8Array(maxEntropySize);
@@ -236,6 +237,9 @@ function measureUpload() {
       const sizeToCopy = Math.min(maxEntropySize, chunkSize - offset);
       payload.set(randomSeed.subarray(0, sizeToCopy), offset);
     }
+
+    // Convert raw binary into an optimized Blob pseudo-file asset
+    const blobPayload = new Blob([payload], { type: "application/octet-stream" });
 
     let activeStreams = [];
     let bytesUploadedAfterRamp = 0;
@@ -251,7 +255,6 @@ function measureUpload() {
       const xhr = new XMLHttpRequest();
       activeStreams.push(xhr);
       
-      // Pointing directly to the open wildcard route
       xhr.open("POST", `${UPLOAD_TARGET}?nocache=${Math.random()}`, true);
       
       let lastLoaded = 0;
@@ -273,7 +276,11 @@ function measureUpload() {
         startXHRStream();
       };
 
-      xhr.send(payload);
+      // Wrap payload in FormData to enable kernel-level fast network boundary streaming
+      const formWrapper = new FormData();
+      formWrapper.append("speedtest_frame", blobPayload, "frame.bin");
+
+      xhr.send(formWrapper);
     };
 
     const uiInterval = setInterval(() => {
