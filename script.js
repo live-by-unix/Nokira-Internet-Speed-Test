@@ -33,7 +33,7 @@ const GAUGE_LENGTH = 503;
 
 const CF_PING = "https://speed.cloudflare.com/__down?bytes=1";
 const CF_DOWN = "https://speed.cloudflare.com/__down?bytes=10000000"; // ~10MB chunks
-const UPLOAD_TARGET = "https://usa.openspeedtest.com/upload";         // Unthrottled, CORS-open enterprise target
+const UPLOAD_TARGET = "https://httpbin.org/anything";                 // Verified, globally open CORS wildcard endpoint
 const IP_INFO = "https://ipapi.co/json/";
 
 // --- State Management ---
@@ -219,13 +219,13 @@ async function measureDownload() {
   return finalElapsedActive > 0 ? (bytesAfterRampUp * 8) / finalElapsedActive / 1_000_000 : 0;
 }
 
-// --- 3. High-Speed Upload Engine (Enterprise Ingestion Track) ---
+// --- 3. High-Speed Upload Engine (CORS-Compliant Verified Pipeline) ---
 function measureUpload() {
   return new Promise((resolve) => {
     const testDuration = 8000;
     const rampUpTime = 2000;
-    const numStreams = 4;        // Back up to 4 parallel processing pipelines
-    const chunkSize = 5_000_000; // 5MB chunks to easily saturate high-speed fiber uploading
+    const numStreams = 3;        // Multi-stream layout to effectively fill up your fiber line
+    const chunkSize = 2000000;   // ~2MB blocks prevent multi-threaded socket crashes
     
     const payload = new Uint8Array(chunkSize);
     const maxEntropySize = 65536; 
@@ -251,7 +251,7 @@ function measureUpload() {
       const xhr = new XMLHttpRequest();
       activeStreams.push(xhr);
       
-      // Using an enterprise-scale speedtest post target with open CORS rules
+      // Pointing directly to the open wildcard route
       xhr.open("POST", `${UPLOAD_TARGET}?nocache=${Math.random()}`, true);
       
       let lastLoaded = 0;
