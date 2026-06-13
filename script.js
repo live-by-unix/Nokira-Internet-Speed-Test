@@ -115,7 +115,7 @@ async function measurePingAndJitter(iter = 25) {
     await new Promise((r) => setTimeout(r, 20));
   }
 
-  // Trim top and bottom 10% outliers to filter local UI-thread thread jitter
+  // Trim top and bottom 10% outliers to filter local UI-thread jitter
   times.sort((a, b) => a - b);
   const cut = Math.floor(times.length * 0.1);
   const trimmed = times.slice(cut, times.length - cut);
@@ -206,7 +206,7 @@ async function measureDownload() {
   return finalElapsedActive > 0 ? (bytesAfterRampUp * 8) / finalElapsedActive / 1_000_000 : 0;
 }
 
-// --- 3. High-Speed Upload Engine (Uncompressible Chunk Pipelines) ---
+// --- 3. High-Speed Upload Engine (With Quota Safe Chunk Allocation) ---
 function measureUpload() {
   return new Promise((resolve) => {
     const testDuration = 8000;
@@ -214,9 +214,17 @@ function measureUpload() {
     const numStreams = 4;
     const chunkSize = 4_000_000; // 4MB chunks to efficiently saturate fiber upload lines
     
-    // Fill buffer with random cryptographically secure bytes to prevent compression by ISPs or hardware
+    // Fix: Fill data in max allowed 64KB increments to avoid the browser QuotaExceededError
     const payload = new Uint8Array(chunkSize);
-    crypto.getRandomValues(payload);
+    const maxEntropySize = 65536; 
+    const randomSeed = new Uint8Array(maxEntropySize);
+    crypto.getRandomValues(randomSeed);
+
+    // Replicate the high-entropy seed throughout the rest of the array buffer
+    for (let offset = 0; offset < chunkSize; offset += maxEntropySize) {
+      const sizeToCopy = Math.min(maxEntropySize, chunkSize - offset);
+      payload.set(randomSeed.subarray(0, sizeToCopy), offset);
+    }
 
     let activeStreams = [];
     let bytesUploadedAfterRamp = 0;
