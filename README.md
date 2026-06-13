@@ -7,7 +7,7 @@ This features cloudflare workers, cloudflare pages, and non-framework HTML/CSS/J
 
 ## Website link
 Link to the actual website is [here](https://nokira.pages.dev/): https://nokira.pages.dev/      
-Link to the worker I used is [here](https://nokira-api.live-by-unix.workers.dev/): https://nokira-api.live-by-unix.workers.dev/ 
+Link to the worker I used is [here](https://nokira-api.live-by-unix.workers.dev/): https://nokira-api.live-by-unix.workers.dev/ (The newest version of the website does not utlize workers anymore)
 
 ## Why Nokira   
 Most "internet speed tests", most famously Google's/Measurement Lab's Internet Speed Test use lab based results., my thing using litreal post requests to a Cloudflare worker to simulate actual speed. Unlike others which do a lab simulation of your internet. 
